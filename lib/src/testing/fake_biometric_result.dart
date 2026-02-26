@@ -66,6 +66,12 @@ class FakeBiometricResult {
   static BiometricResult invalidated() =>
       const BiometricResult.invalidated();
 
+  /// Re-authentication required (refresh token expired).
+  static BiometricResult reauthenticationRequired({
+    String? reason = 'Test: refresh token expired',
+  }) =>
+      BiometricResult.reauthenticationRequired(reason: reason);
+
   /// Platform error.
   static BiometricResult error({
     String message = 'Test error',

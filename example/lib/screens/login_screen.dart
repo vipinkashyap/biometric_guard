@@ -103,15 +103,21 @@ class _LoginScreenState extends State<LoginScreen> {
           _isLoading = false;
         });
       },
-      unavailable: (reason) {
+      unavailable: (reason, message) {
         setState(() {
-          _statusMessage = 'Biometric unavailable: ${reason.name}';
+          _statusMessage = message ?? 'Biometric unavailable: ${reason.name}';
           _isLoading = false;
         });
       },
       invalidated: () {
         setState(() {
           _statusMessage = 'Biometric invalidated — please re-enroll';
+          _isLoading = false;
+        });
+      },
+      reauthenticationRequired: (reason) {
+        setState(() {
+          _statusMessage = reason ?? 'Session expired — please sign in again';
           _isLoading = false;
         });
       },

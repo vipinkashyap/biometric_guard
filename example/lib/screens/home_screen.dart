@@ -56,8 +56,9 @@ class _HomeScreenState extends State<HomeScreen> {
       tokenExpired: () => 'Token expired — cannot authorize',
       cancelled: () => 'Transfer cancelled by user',
       lockedOut: (until) => 'Locked out — try later',
-      unavailable: (reason) => 'Biometric unavailable: ${reason.name}',
+      unavailable: (reason, message) => message ?? 'Biometric unavailable: ${reason.name}',
       invalidated: () => 'Biometric invalidated',
+      reauthenticationRequired: (reason) => reason ?? 'Please sign in again',
       error: (msg, _) => 'Error: $msg',
     );
 
@@ -151,8 +152,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   tokenExpired: () => 'Token expired',
                   cancelled: () => 'Cancelled',
                   lockedOut: (_) => 'Locked out',
-                  unavailable: (r) => 'Unavailable: ${r.name}',
+                  unavailable: (r, msg) => msg ?? 'Unavailable: ${r.name}',
                   invalidated: () => 'Invalidated',
+                  reauthenticationRequired: (r) => r ?? 'Re-auth required',
                   error: (m, _) => 'Error: $m',
                 );
                 // ignore: use_build_context_synchronously
