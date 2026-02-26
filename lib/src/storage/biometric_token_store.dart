@@ -5,13 +5,13 @@ import 'token_store_interface.dart';
 /// Default [TokenStoreInterface] implementation backed by
 /// [flutter_secure_storage].
 ///
-/// Uses the platform keychain (iOS) or EncryptedSharedPreferences (Android)
+/// Uses the platform keychain (iOS) or RSA OAEP + AES-GCM (Android)
 /// for secure at-rest storage of tokens and session data.
 class BiometricTokenStore implements TokenStoreInterface {
   BiometricTokenStore({FlutterSecureStorage? storage})
       : _storage = storage ??
             const FlutterSecureStorage(
-              aOptions: AndroidOptions(encryptedSharedPreferences: true),
+              aOptions: AndroidOptions(),
               iOptions: IOSOptions(
                 accessibility: KeychainAccessibility.first_unlock_this_device,
               ),

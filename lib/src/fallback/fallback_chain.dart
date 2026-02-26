@@ -94,14 +94,19 @@ class FallbackChainExecutor {
     try {
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
+        persistAcrossBackgrounding: true,
+        biometricOnly: false,
       );
       return didAuthenticate
           ? _FallbackResult.success
           : _FallbackResult.failed;
+    } on LocalAuthException catch (e) {
+      // User or system cancelled — treat as cancelled, not failed.
+      if (e.code == LocalAuthExceptionCode.userCanceled ||
+          e.code == LocalAuthExceptionCode.systemCanceled) {
+        return _FallbackResult.cancelled;
+      }
+      return _FallbackResult.failed;
     } on Exception catch (_) {
       // Platform communication error. Programming errors still propagate.
       return _FallbackResult.failed;

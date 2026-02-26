@@ -101,14 +101,19 @@ class MaterialFallbackHandler extends FallbackHandler {
       final localAuth = LocalAuthentication();
       final authenticated = await localAuth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: false,
-        ),
+        persistAcrossBackgrounding: true,
+        biometricOnly: false,
       );
       return authenticated ? FallbackResult.success : FallbackResult.cancelled;
+    } on LocalAuthException catch (e) {
+      // User or system cancelled. Return cancelled for user-initiated cancels.
+      if (e.code == LocalAuthExceptionCode.userCanceled ||
+          e.code == LocalAuthExceptionCode.systemCanceled) {
+        return FallbackResult.cancelled;
+      }
+      return FallbackResult.cancelled;
     } on Exception catch (_) {
-      // Platform error or user cancelled. Programming errors still propagate.
+      // Platform error. Programming errors still propagate.
       return FallbackResult.cancelled;
     }
   }

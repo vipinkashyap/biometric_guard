@@ -1,5 +1,4 @@
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth/error_codes.dart' as auth_error;
 
 import '../core/biometric_session.dart';
 
@@ -22,10 +21,8 @@ class AndroidHandler {
     try {
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
-        options: AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: biometricOnly,
-        ),
+        persistAcrossBackgrounding: true,
+        biometricOnly: biometricOnly,
       );
 
       if (didAuthenticate) {
@@ -33,23 +30,25 @@ class AndroidHandler {
       } else {
         return AndroidAuthOutcome.failed;
       }
-    } on Exception catch (e) {
-      final errorString = e.toString();
-
-      if (errorString.contains(auth_error.notAvailable)) {
-        return AndroidAuthOutcome.notAvailable;
-      }
-      if (errorString.contains(auth_error.notEnrolled)) {
-        return AndroidAuthOutcome.notEnrolled;
-      }
-      if (errorString.contains(auth_error.passcodeNotSet)) {
-        return AndroidAuthOutcome.passcodeNotSet;
-      }
-      if (errorString.contains(auth_error.lockedOut) ||
-          errorString.contains(auth_error.permanentlyLockedOut)) {
-        return AndroidAuthOutcome.lockedOut;
-      }
-
+    } on LocalAuthException catch (e) {
+      return switch (e.code) {
+        LocalAuthExceptionCode.noBiometricHardware ||
+        LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable =>
+          AndroidAuthOutcome.notAvailable,
+        LocalAuthExceptionCode.noBiometricsEnrolled =>
+          AndroidAuthOutcome.notEnrolled,
+        LocalAuthExceptionCode.noCredentialsSet =>
+          AndroidAuthOutcome.passcodeNotSet,
+        LocalAuthExceptionCode.temporaryLockout ||
+        LocalAuthExceptionCode.biometricLockout =>
+          AndroidAuthOutcome.lockedOut,
+        LocalAuthExceptionCode.userCanceled ||
+        LocalAuthExceptionCode.systemCanceled ||
+        LocalAuthExceptionCode.userRequestedFallback =>
+          AndroidAuthOutcome.cancelled,
+        _ => AndroidAuthOutcome.error,
+      };
+    } on Exception catch (_) {
       return AndroidAuthOutcome.error;
     }
   }

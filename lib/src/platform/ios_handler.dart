@@ -1,5 +1,4 @@
 import 'package:local_auth/local_auth.dart';
-import 'package:local_auth/error_codes.dart' as auth_error;
 
 import '../core/biometric_session.dart';
 
@@ -21,10 +20,8 @@ class IOSHandler {
     try {
       final didAuthenticate = await _localAuth.authenticate(
         localizedReason: reason,
-        options: AuthenticationOptions(
-          stickyAuth: true,
-          biometricOnly: biometricOnly,
-        ),
+        persistAcrossBackgrounding: true,
+        biometricOnly: biometricOnly,
       );
 
       if (didAuthenticate) {
@@ -32,23 +29,25 @@ class IOSHandler {
       } else {
         return IOSAuthOutcome.failed;
       }
-    } on Exception catch (e) {
-      final errorString = e.toString();
-
-      if (errorString.contains(auth_error.notAvailable)) {
-        return IOSAuthOutcome.notAvailable;
-      }
-      if (errorString.contains(auth_error.notEnrolled)) {
-        return IOSAuthOutcome.notEnrolled;
-      }
-      if (errorString.contains(auth_error.passcodeNotSet)) {
-        return IOSAuthOutcome.passcodeNotSet;
-      }
-      if (errorString.contains(auth_error.lockedOut) ||
-          errorString.contains(auth_error.permanentlyLockedOut)) {
-        return IOSAuthOutcome.lockedOut;
-      }
-
+    } on LocalAuthException catch (e) {
+      return switch (e.code) {
+        LocalAuthExceptionCode.noBiometricHardware ||
+        LocalAuthExceptionCode.biometricHardwareTemporarilyUnavailable =>
+          IOSAuthOutcome.notAvailable,
+        LocalAuthExceptionCode.noBiometricsEnrolled =>
+          IOSAuthOutcome.notEnrolled,
+        LocalAuthExceptionCode.noCredentialsSet =>
+          IOSAuthOutcome.passcodeNotSet,
+        LocalAuthExceptionCode.temporaryLockout ||
+        LocalAuthExceptionCode.biometricLockout =>
+          IOSAuthOutcome.lockedOut,
+        LocalAuthExceptionCode.userCanceled ||
+        LocalAuthExceptionCode.systemCanceled ||
+        LocalAuthExceptionCode.userRequestedFallback =>
+          IOSAuthOutcome.cancelled,
+        _ => IOSAuthOutcome.error,
+      };
+    } on Exception catch (_) {
       return IOSAuthOutcome.error;
     }
   }
