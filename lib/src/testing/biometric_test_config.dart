@@ -24,7 +24,6 @@ class BiometricTestConfig {
       persistLockout: false,
       fallbackChain: fallbackChain,
       tokenStore: FakeTokenStore(),
-      useCustomPromptUI: false,
     );
   }
 }
