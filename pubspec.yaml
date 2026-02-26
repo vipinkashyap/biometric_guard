@@ -5,9 +5,9 @@ description: >-
   session management, lockout logic, and audit event emission. Backend-agnostic —
   works with Firebase, Supabase, Amplify, custom JWT, or any auth system.
 version: 0.1.0
-homepage: https://github.com/biometric-shield/biometric_shield
-repository: https://github.com/biometric-shield/biometric_shield
-issue_tracker: https://github.com/biometric-shield/biometric_shield/issues
+homepage: https://github.com/vipinkashyap/biometric_guard
+repository: https://github.com/vipinkashyap/biometric_guard
+issue_tracker: https://github.com/vipinkashyap/biometric_guard/issues
 
 topics:
   - biometric
