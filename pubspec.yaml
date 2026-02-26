@@ -1,10 +1,24 @@
 name: biometric_shield
-description: >
+description: >-
   A composable Flutter SDK that wraps biometric authentication into an
   injectable, namespace-aware layer with typed results, fallback chains,
-  and audit event emission.
+  session management, lockout logic, and audit event emission. Backend-agnostic —
+  works with Firebase, Supabase, Amplify, custom JWT, or any auth system.
 version: 0.1.0
 homepage: https://github.com/biometric-shield/biometric_shield
+repository: https://github.com/biometric-shield/biometric_shield
+issue_tracker: https://github.com/biometric-shield/biometric_shield/issues
+
+topics:
+  - biometric
+  - authentication
+  - security
+  - face-id
+  - fingerprint
+
+platforms:
+  android:
+  ios:
 
 environment:
   sdk: ^3.10.8
