@@ -6,7 +6,7 @@
 /// ```dart
 /// import 'package:biometric_shield/biometric_shield_testing.dart';
 /// ```
-library biometric_shield_testing;
+library;
 
 export 'src/testing/biometric_shield_mock.dart';
 export 'src/testing/fake_biometric_session.dart';

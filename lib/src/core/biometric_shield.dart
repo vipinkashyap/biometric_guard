@@ -1,5 +1,3 @@
-import 'package:local_auth/local_auth.dart';
-
 import 'biometric_config.dart';
 import 'biometric_preferences.dart';
 import 'biometric_result.dart';
@@ -66,8 +64,7 @@ class BiometricShield {
   late final BiometricPreferences _preferences;
 
   /// Create a new BiometricShield instance with optional config.
-  BiometricShield({BiometricConfig config = const BiometricConfig()})
-      : config = config {
+  BiometricShield({this.config = const BiometricConfig()}) {
     _sessionManager = SessionManager(config: config);
     _lockoutManager = LockoutManager(config: config);
     _capabilityDetector = CapabilityDetector();
@@ -505,14 +502,14 @@ class BiometricShield {
           userId: userId,
         );
         // If refresh succeeded, return the refreshed result
-        if (refreshed is BiometricSessionValid) {
+        if (refreshed case BiometricSessionValid(:final token)) {
           _emitEvent(BiometricEventType.authSucceeded, userId, properties: {
             'method': method.name,
             'tokenRefreshed': true,
           });
           return BiometricResult.success(
             session: session,
-            token: (refreshed as BiometricSessionValid).token,
+            token: token,
           );
         }
         // If refresh failed, return that result

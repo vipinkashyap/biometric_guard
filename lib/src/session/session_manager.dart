@@ -108,6 +108,7 @@ class SessionManager {
   }
 
   /// Extend the session if activity-based reset is enabled.
+  /// Also emits a stream event so listeners know the session was refreshed.
   Future<void> onActivity({String? userId}) async {
     if (!_config.sessionResetsOnActivity) return;
 
@@ -129,6 +130,9 @@ class SessionManager {
       _sessionKey(resolvedUserId),
       _encodeSession(extended),
     );
+
+    // Notify stream listeners of the extended session
+    _emitSessionStreamEvent(resolvedUserId, extended);
   }
 
   /// Clear the session for a user (e.g. on logout).
@@ -191,16 +195,6 @@ class SessionManager {
     }
 
     return _sessionStreamControllers[resolvedUserId]!.stream;
-  }
-
-  /// Notify listeners when a user becomes active (activity detected).
-  void onActivity({String? userId}) {
-    if (!_config.sessionResetsOnActivity) return;
-    final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
-    final session = _activeSessions[resolvedUserId];
-    if (session != null && !session.isExpired) {
-      _emitSessionStreamEvent(resolvedUserId, session);
-    }
   }
 
   /// Clean up resources (close stream controllers).

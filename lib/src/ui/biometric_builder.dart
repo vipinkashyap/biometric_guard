@@ -200,7 +200,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
       lockedOut: (_) {
         setState(() => _authState = AuthFailed(result: result));
       },
-      unavailable: (_, __) {
+      unavailable: (_, _) {
         setState(() => _authState = AuthFailed(result: result));
       },
       invalidated: () {
@@ -209,7 +209,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
       reauthenticationRequired: (_) {
         setState(() => _authState = AuthFailed(result: result));
       },
-      error: (_, __) {
+      error: (_, _) {
         setState(() => _authState = AuthFailed(result: result));
       },
     );
@@ -245,7 +245,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
       lockedOut: (_) {
         setState(() => _authState = AuthFailed(result: result));
       },
-      unavailable: (_, __) {
+      unavailable: (_, _) {
         setState(() => _authState = AuthFailed(result: result));
       },
       invalidated: () {
@@ -254,7 +254,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
       reauthenticationRequired: (_) {
         setState(() => _authState = AuthFailed(result: result));
       },
-      error: (_, __) {
+      error: (_, _) {
         setState(() => _authState = AuthFailed(result: result));
       },
     );

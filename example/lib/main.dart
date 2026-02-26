@@ -17,7 +17,7 @@ import 'screens/settings_screen.dart';
 //
 // All are optional — the SDK works with zero config.
 final shield = BiometricShield(
-  BiometricConfig(
+  config: BiometricConfig(
     sessionDuration: const Duration(minutes: 15),
     sessionResetsOnActivity: true,
     maxAttempts: 3,

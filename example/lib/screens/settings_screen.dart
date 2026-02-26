@@ -148,6 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 await shield.clearAll(userId: _userId);
                 await shield.preferences.clearAll(userId: _userId);
                 if (mounted) {
+                  // ignore: use_build_context_synchronously
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('All biometric data cleared')),
                   );

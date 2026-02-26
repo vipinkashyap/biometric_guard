@@ -10,7 +10,7 @@
 /// ```dart
 /// import 'package:biometric_shield/biometric_shield_ui.dart';
 /// ```
-library biometric_shield_ui;
+library;
 
 export 'src/ui/biometric_builder.dart';
 export 'src/ui/biometric_gate.dart';

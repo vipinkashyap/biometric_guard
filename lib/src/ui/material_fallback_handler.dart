@@ -18,6 +18,12 @@ typedef CustomFallbackBuilder = Widget Function(
 ///
 /// The builder calls one of these to signal the result of fallback auth.
 class CustomFallbackCallbacks {
+  const CustomFallbackCallbacks({
+    required this.onSuccess,
+    required this.onCancel,
+    required this.onFailure,
+  });
+
   /// Called when the user successfully completes fallback authentication.
   final void Function() onSuccess;
 
@@ -26,12 +32,6 @@ class CustomFallbackCallbacks {
 
   /// Called when fallback authentication fails (e.g., wrong PIN).
   final void Function() onFailure;
-
-  const CustomFallbackCallbacks({
-    required this.onSuccess,
-    required this.onCancel,
-    required this.onFailure,
-  });
 }
 
 /// Default Material fallback UI handler for BiometricShield.
@@ -135,7 +135,7 @@ class MaterialFallbackHandler extends FallbackHandler {
       context: context,
       isScrollControlled: true,
       shape: RoundedRectangleBorder(
-        borderRadius: theme?.sheetBorderRadius ?? const BorderRadius.zero,
+        borderRadius: theme?.sheetBorderRadius ?? BorderRadius.zero,
       ),
       builder: (sheetContext) {
         return DraggableScrollableSheet(

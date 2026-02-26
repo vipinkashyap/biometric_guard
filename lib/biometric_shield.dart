@@ -4,7 +4,7 @@
 /// without Flutter widget dependencies.
 ///
 /// For Flutter UI widgets, import [biometric_shield_ui] separately.
-library biometric_shield;
+library;
 
 // Core
 export 'src/core/biometric_config.dart';
