@@ -34,15 +34,10 @@ class BiometricConfig {
     this.defaultUserId,
     this.authenticationTimeout = const Duration(seconds: 60),
     this.verbose = false,
-  }) : assert(maxAttempts > 0, 'maxAttempts must be > 0'),
-       assert(
-         fallbackHandler != null ||
-             !fallbackChain.any((f) =>
-                 f == BiometricFallback.customPin ||
-                 f == BiometricFallback.customPassword),
-         'fallbackHandler must be provided when fallbackChain '
-         'contains customPin or customPassword',
-       );
+  }) : assert(maxAttempts > 0, 'maxAttempts must be > 0');
+       // Note: fallbackHandler validation is in validate() below because
+       // List.any() is not a const expression and cannot be used in asserts
+       // on a const constructor.
 
   /// Validate this config at runtime. Call this from BiometricShield
   /// constructor to catch misconfiguration even in release builds.
