@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:biometric_shield/biometric_shield.dart';
+import '../main.dart';
 
 /// Demonstrates Pattern 1: Gate on App Launch.
 ///
@@ -26,7 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _checkCapability() async {
-    final capability = await BiometricShield.getCapability();
+    final capability = await shield.getCapability();
     setState(() => _capability = capability);
   }
 
@@ -44,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
     // Store the token for future biometric-gated access.
     // This is the key integration point — after your server auth
     // succeeds, hand the token to BiometricShield.
-    await BiometricShield.storeToken(
+    await shield.storeToken(
       fakeServerToken,
       userId: 'demo-user',
     );
@@ -65,10 +66,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _statusMessage = 'Authenticating...';
     });
 
-    final result = await BiometricShield.authenticate(
+    final result = await shield.authenticate(
       reason: 'Unlock your account',
       userId: 'demo-user',
-      context: context,
     );
 
     result.when(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:biometric_shield/biometric_shield.dart';
+import 'package:biometric_shield/biometric_shield_ui.dart';
+import '../main.dart';
 
 /// Demonstrates Pattern 2: Sensitive Action Gate (Widget).
 ///
@@ -14,6 +15,7 @@ class SensitiveDataScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Health Records')),
       body: BiometricGate(
+        shield: shield,
         reason: 'Confirm to view health records',
         userId: 'demo-user',
         reauthOnResume: true,
@@ -21,21 +23,6 @@ class SensitiveDataScreen extends StatelessWidget {
         // Called when auth succeeds — use for analytics side effects.
         onAuthenticated: (result) {
           debugPrint('Health records unlocked: $result');
-        },
-
-        // Called when auth fails — return true to retry automatically.
-        onAuthFailed: (result) async {
-          return result.when(
-            success: (_, __) => false,
-            fallbackSuccess: (_, __, ___) => false,
-            sessionValid: (_, __) => false,
-            tokenExpired: () => false,
-            cancelled: () => false, // Don't retry on cancel
-            lockedOut: (_) => false, // Don't retry on lockout
-            unavailable: (_) => false,
-            invalidated: () => false,
-            error: (_, __) => true, // Retry on transient errors
-          );
         },
 
         // Shown when all auth methods fail.

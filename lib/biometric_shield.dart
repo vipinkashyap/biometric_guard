@@ -1,8 +1,9 @@
 /// BiometricShield — A composable Flutter SDK for biometric authentication.
 ///
-/// Wraps all biometric authentication concerns into an injectable,
-/// namespace-aware layer with typed results, fallback chains,
-/// and audit event emission.
+/// Core package for biometric authentication. Pure Dart business logic
+/// without Flutter widget dependencies.
+///
+/// For Flutter UI widgets, import [biometric_shield_ui] separately.
 library biometric_shield;
 
 // Core
@@ -23,11 +24,6 @@ export 'src/storage/token_store_interface.dart';
 
 // Session
 export 'src/session/lockout_state.dart';
-
-// UI
-export 'src/ui/biometric_gate.dart';
-export 'src/ui/biometric_theme.dart';
-export 'src/ui/biometric_strings.dart';
 
 // Analytics
 export 'src/analytics/biometric_event.dart';

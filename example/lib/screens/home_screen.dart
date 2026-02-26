@@ -2,13 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:biometric_shield/biometric_shield.dart';
-
+import '../main.dart';
 import 'sensitive_data_screen.dart';
 
 /// Home screen shown after successful authentication.
 ///
 /// Demonstrates:
-/// - Checking session validity
+/// - Checking session validity via stream
 /// - Programmatic re-authentication for sensitive actions
 /// - Logout (session clearing)
 /// - Navigating to a BiometricGate-protected screen (Pattern 2)
@@ -30,8 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSessionInfo() async {
-    final hasSession = await BiometricShield.hasValidSession(userId: 'demo-user');
-    final token = await BiometricShield.getToken(userId: 'demo-user');
+    final hasSession = await shield.hasValidSession(userId: 'demo-user');
+    final token = await shield.getToken(userId: 'demo-user');
 
     setState(() {
       _sessionInfo = hasSession ? 'Active session' : 'No active session';
@@ -43,10 +43,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Programmatic re-auth for a one-off sensitive action.
   Future<void> _performSensitiveAction() async {
-    final result = await BiometricShield.authenticate(
+    final result = await shield.authenticate(
       reason: 'Confirm to transfer funds',
       userId: 'demo-user',
-      context: context,
       requireFresh: true, // Force re-auth even if session is valid
     );
 
@@ -78,7 +77,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Clear session and navigate back to login.
   Future<void> _logout() async {
-    await BiometricShield.clearSession(userId: 'demo-user');
+    await shield.clearSession(userId: 'demo-user');
     if (mounted) {
       unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
@@ -141,10 +140,9 @@ class _HomeScreenState extends State<HomeScreen> {
             // Validate or re-auth (silent)
             TextButton.icon(
               onPressed: () async {
-                final result = await BiometricShield.validateOrAuthenticate(
+                final result = await shield.validateOrAuthenticate(
                   reason: 'Verify session',
                   userId: 'demo-user',
-                  context: context,
                 );
                 final status = result.when(
                   success: (_, __) => 'Fresh auth succeeded',
