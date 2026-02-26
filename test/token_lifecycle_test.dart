@@ -3,15 +3,15 @@ import 'package:biometric_shield/biometric_shield.dart';
 
 /// A test implementation of TokenLifecycle that returns configurable results.
 class TestTokenLifecycle implements TokenLifecycle {
-  TokenStatus validateResult;
-  TokenRefreshResult refreshResult;
-  int validateCallCount = 0;
-  int refreshCallCount = 0;
 
   TestTokenLifecycle({
     this.validateResult = TokenStatus.valid,
     this.refreshResult = const TokenRefreshResult.success(newToken: 'new-token'),
   });
+  TokenStatus validateResult;
+  TokenRefreshResult refreshResult;
+  int validateCallCount = 0;
+  int refreshCallCount = 0;
 
   @override
   Future<TokenStatus> validate(String token) async {
@@ -93,26 +93,26 @@ void main() {
         metadata: {'key': 'val'},
       );
       expect(result, isA<TokenRefreshSuccess>());
-      final success = result as TokenRefreshSuccess;
+      const success = result as TokenRefreshSuccess;
       expect(success.newToken, 'jwt');
       expect(success.metadata, {'key': 'val'});
     });
 
     test('success defaults to empty metadata', () {
       const result = TokenRefreshResult.success(newToken: 'jwt');
-      final success = result as TokenRefreshSuccess;
+      const success = result as TokenRefreshSuccess;
       expect(success.metadata, isEmpty);
     });
 
     test('failed holds optional reason', () {
       const result = TokenRefreshResult.failed(reason: 'timeout');
-      final failed = result as TokenRefreshFailed;
+      const failed = result as TokenRefreshFailed;
       expect(failed.reason, 'timeout');
     });
 
     test('failed reason defaults to null', () {
       const result = TokenRefreshResult.failed();
-      final failed = result as TokenRefreshFailed;
+      const failed = result as TokenRefreshFailed;
       expect(failed.reason, isNull);
     });
   });
@@ -153,7 +153,7 @@ void main() {
   group('BiometricEvent', () {
     test('properties are immutable', () {
       final event = BiometricEvent(
-        type: BiometricEventType.authSuccess,
+        type: BiometricEventType.authSucceeded,
         userId: 'user-1',
         timestamp: DateTime.now().toUtc(),
         properties: {'key': 'value'},
@@ -168,14 +168,14 @@ void main() {
     test('stores all fields', () {
       final now = DateTime.now().toUtc();
       final event = BiometricEvent(
-        type: BiometricEventType.authSuccess,
+        type: BiometricEventType.authSucceeded,
         userId: 'user-1',
         timestamp: now,
         method: BiometricAuthMethod.faceID,
         properties: {'source': 'test'},
       );
 
-      expect(event.type, BiometricEventType.authSuccess);
+      expect(event.type, BiometricEventType.authSucceeded);
       expect(event.userId, 'user-1');
       expect(event.timestamp, now);
       expect(event.method, BiometricAuthMethod.faceID);
