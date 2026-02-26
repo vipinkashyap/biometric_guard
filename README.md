@@ -232,7 +232,7 @@ final shield = BiometricShield(
 );
 ```
 
-See [docs/INTEGRATION.md](docs/INTEGRATION.md) for complete Firebase, Supabase, and REST JWT walkthroughs.
+See [doc/INTEGRATION.md](doc/INTEGRATION.md) for complete Firebase, Supabase, and REST JWT walkthroughs.
 
 ## Common patterns
 
