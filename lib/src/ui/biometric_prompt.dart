@@ -46,11 +46,6 @@ class BiometricPrompt {
 }
 
 class _BiometricPromptSheet extends StatefulWidget {
-  final String reason;
-  final Future<BiometricResult> Function() onAuthenticate;
-  final void Function(BiometricResult result) onResult;
-  final BiometricTheme? theme;
-  final BiometricStrings? strings;
 
   const _BiometricPromptSheet({
     required this.reason,
@@ -59,6 +54,11 @@ class _BiometricPromptSheet extends StatefulWidget {
     this.theme,
     this.strings,
   });
+  final String reason;
+  final Future<BiometricResult> Function() onAuthenticate;
+  final void Function(BiometricResult result) onResult;
+  final BiometricTheme? theme;
+  final BiometricStrings? strings;
 
   @override
   State<_BiometricPromptSheet> createState() => _BiometricPromptSheetState();

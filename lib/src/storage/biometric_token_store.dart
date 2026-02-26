@@ -8,10 +8,6 @@ import 'token_store_interface.dart';
 /// Uses the platform keychain (iOS) or EncryptedSharedPreferences (Android)
 /// for secure at-rest storage of tokens and session data.
 class BiometricTokenStore implements TokenStoreInterface {
-  static const _storagePrefix = 'biometric_shield';
-
-  final FlutterSecureStorage _storage;
-
   BiometricTokenStore({FlutterSecureStorage? storage})
       : _storage = storage ??
             const FlutterSecureStorage(
@@ -20,6 +16,10 @@ class BiometricTokenStore implements TokenStoreInterface {
                 accessibility: KeychainAccessibility.first_unlock_this_device,
               ),
             );
+
+  static const _storagePrefix = 'biometric_shield';
+
+  final FlutterSecureStorage _storage;
 
   String _prefixedKey(String key) => '$_storagePrefix:$key';
 

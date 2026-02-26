@@ -1,15 +1,14 @@
 import 'package:local_auth/local_auth.dart';
 import 'package:local_auth/error_codes.dart' as auth_error;
 
-import '../core/biometric_result.dart';
 import '../core/biometric_session.dart';
 
 /// Handles iOS-specific biometric authentication (Face ID / Touch ID).
 class IOSHandler {
-  final LocalAuthentication _localAuth;
 
   IOSHandler({LocalAuthentication? localAuth})
       : _localAuth = localAuth ?? LocalAuthentication();
+  final LocalAuthentication _localAuth;
 
   /// Attempt biometric authentication on iOS.
   ///

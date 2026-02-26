@@ -97,37 +97,37 @@ sealed class BiometricResult {
 
 /// Biometric auth succeeded. Session is now active.
 class BiometricSuccess extends BiometricResult {
-  final BiometricSession session;
-  final String? token;
 
   const BiometricSuccess({
     required this.session,
     required this.token,
   });
+  final BiometricSession session;
+  final String? token;
 }
 
 /// Biometric failed but a fallback succeeded.
 class BiometricFallbackSuccess extends BiometricResult {
-  final BiometricFallback methodUsed;
-  final BiometricSession session;
-  final String? token;
 
   const BiometricFallbackSuccess({
     required this.methodUsed,
     required this.session,
     required this.token,
   });
+  final BiometricFallback methodUsed;
+  final BiometricSession session;
+  final String? token;
 }
 
 /// Active session was found — no prompt shown.
 class BiometricSessionValid extends BiometricResult {
-  final BiometricSession session;
-  final String? token;
 
   const BiometricSessionValid({
     required this.session,
     required this.token,
   });
+  final BiometricSession session;
+  final String? token;
 }
 
 /// Auth succeeded but token was expired or missing.
@@ -142,20 +142,20 @@ class BiometricCancelled extends BiometricResult {
 
 /// Max attempts exceeded. User is locked out.
 class BiometricLockedOut extends BiometricResult {
-  final DateTime lockedUntil;
 
   const BiometricLockedOut({
     required this.lockedUntil,
   });
+  final DateTime lockedUntil;
 }
 
 /// Biometric is not available or not enrolled on this device.
 class BiometricUnavailable extends BiometricResult {
-  final BiometricUnavailableReason reason;
 
   const BiometricUnavailable({
     required this.reason,
   });
+  final BiometricUnavailableReason reason;
 }
 
 /// Biometric keys were invalidated (new fingerprint enrolled etc).
@@ -165,11 +165,11 @@ class BiometricInvalidated extends BiometricResult {
 
 /// An unexpected platform error occurred.
 class BiometricError extends BiometricResult {
-  final String message;
-  final Object? cause;
 
   const BiometricError({
     required this.message,
     required this.cause,
   });
+  final String message;
+  final Object? cause;
 }

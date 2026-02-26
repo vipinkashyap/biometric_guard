@@ -5,6 +5,12 @@ import 'package:flutter/widgets.dart';
 /// The SDK passes these to [CustomFallbackBuilder] so the custom UI
 /// can communicate auth outcomes back to the SDK.
 class CustomFallbackCallbacks {
+
+  const CustomFallbackCallbacks({
+    required this.onSuccess,
+    required this.onCancel,
+    required this.onFailure,
+  });
   /// Call this when the user successfully completes your custom auth.
   final void Function() onSuccess;
 
@@ -13,12 +19,6 @@ class CustomFallbackCallbacks {
 
   /// Call this if the user fails your custom auth (increments attempt counter).
   final void Function() onFailure;
-
-  const CustomFallbackCallbacks({
-    required this.onSuccess,
-    required this.onCancel,
-    required this.onFailure,
-  });
 }
 
 /// Builder function for custom fallback authentication UI.

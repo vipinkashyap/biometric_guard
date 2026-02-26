@@ -7,6 +7,14 @@ import '../core/biometric_session.dart';
 /// delivered to [BiometricConfig.onEvent]. Log these to your analytics
 /// or HIPAA audit store.
 class BiometricEvent {
+  const BiometricEvent({
+    required this.type,
+    required this.userId,
+    required this.timestamp,
+    this.method,
+    this.properties = const {},
+  });
+
   /// The type of event that occurred.
   final BiometricEventType type;
 
@@ -21,14 +29,6 @@ class BiometricEvent {
 
   /// Arbitrary key-value properties for additional context.
   final Map<String, dynamic> properties;
-
-  const BiometricEvent({
-    required this.type,
-    required this.userId,
-    required this.timestamp,
-    this.method,
-    this.properties = const {},
-  });
 
   @override
   String toString() =>

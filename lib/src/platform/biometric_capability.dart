@@ -4,6 +4,16 @@
 /// Platform-honest — exposes capabilities as structured data,
 /// not a single boolean, so callers can make informed UI decisions.
 class BiometricCapability {
+
+  const BiometricCapability({
+    this.hasFaceID = false,
+    this.hasTouchID = false,
+    this.hasStrongBiometric = false,
+    this.hasWeakBiometric = false,
+    this.isEnrolled = false,
+    this.supportsDeviceCredential = false,
+    this.biometricLabel = 'Biometric',
+  });
   /// iOS: true if Face ID is the primary biometric.
   final bool hasFaceID;
 
@@ -25,16 +35,6 @@ class BiometricCapability {
   /// Human-readable label for the available biometric
   /// e.g. "Face ID", "Fingerprint", "Biometric".
   final String biometricLabel;
-
-  const BiometricCapability({
-    this.hasFaceID = false,
-    this.hasTouchID = false,
-    this.hasStrongBiometric = false,
-    this.hasWeakBiometric = false,
-    this.isEnrolled = false,
-    this.supportsDeviceCredential = false,
-    this.biometricLabel = 'Biometric',
-  });
 
   /// Whether any biometric method is available (enrolled and hardware present).
   bool get hasBiometric =>

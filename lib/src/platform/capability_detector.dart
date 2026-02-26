@@ -9,10 +9,10 @@ import 'biometric_capability.dart';
 /// Uses [local_auth] under the hood and translates platform-specific
 /// results into a unified [BiometricCapability] model.
 class CapabilityDetector {
-  final LocalAuthentication _localAuth;
 
   CapabilityDetector({LocalAuthentication? localAuth})
       : _localAuth = localAuth ?? LocalAuthentication();
+  final LocalAuthentication _localAuth;
 
   /// Queries the device for all biometric capabilities.
   Future<BiometricCapability> detect() async {

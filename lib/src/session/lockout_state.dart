@@ -3,6 +3,13 @@
 /// Query this via [BiometricShield.getLockoutState] to check
 /// if the user is currently locked out and when lockout will end.
 class LockoutState {
+
+  const LockoutState({
+    required this.isLockedOut,
+    this.lockedUntil,
+    required this.currentAttemptCount,
+    required this.maxAttempts,
+  });
   /// Whether the user is currently locked out.
   final bool isLockedOut;
 
@@ -15,16 +22,9 @@ class LockoutState {
   /// Maximum allowed attempts before lockout triggers.
   final int maxAttempts;
 
-  const LockoutState({
-    required this.isLockedOut,
-    this.lockedUntil,
-    required this.currentAttemptCount,
-    required this.maxAttempts,
-  });
-
   /// How much time remains in the lockout period, or null if not locked out.
   Duration? get remainingLockout =>
-      lockedUntil != null ? lockedUntil!.difference(DateTime.now()) : null;
+      lockedUntil?.difference(DateTime.now());
 
   /// How many attempts remain before lockout.
   int get remainingAttempts => maxAttempts - currentAttemptCount;

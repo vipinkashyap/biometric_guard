@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:biometric_shield/biometric_shield.dart';
 
@@ -51,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     // Navigate to home
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/home');
+      unawaited(Navigator.of(context).pushReplacementNamed('/home'));
     }
   }
 
@@ -72,15 +74,15 @@ class _LoginScreenState extends State<LoginScreen> {
     result.when(
       success: (session, token) {
         setState(() => _statusMessage = 'Authenticated via ${session.methodUsed.name}');
-        Navigator.of(context).pushReplacementNamed('/home');
+        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
       },
       fallbackSuccess: (method, session, token) {
         setState(() => _statusMessage = 'Authenticated via fallback: ${method.name}');
-        Navigator.of(context).pushReplacementNamed('/home');
+        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
       },
       sessionValid: (session, token) {
         setState(() => _statusMessage = 'Session still valid');
-        Navigator.of(context).pushReplacementNamed('/home');
+        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
       },
       tokenExpired: () {
         setState(() {

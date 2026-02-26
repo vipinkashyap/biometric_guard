@@ -5,6 +5,19 @@ import 'package:flutter/widgets.dart';
 /// Pass this via [BiometricConfig.theme] to brand the biometric
 /// prompt, lockout screen, and fallback bottom sheet.
 class BiometricTheme {
+
+  const BiometricTheme({
+    this.primaryColor,
+    this.backgroundColor,
+    this.errorColor,
+    this.titleStyle,
+    this.subtitleStyle,
+    this.buttonStyle,
+    this.sheetBorderRadius,
+    this.biometricIcon,
+    this.lockoutIcon,
+    this.sheetMaxHeight,
+  });
   /// Primary accent color used for buttons and interactive elements.
   final Color? primaryColor;
 
@@ -35,17 +48,4 @@ class BiometricTheme {
   /// Maximum height of the bottom sheet as a fraction of screen height
   /// (e.g. 0.4 for 40%).
   final double? sheetMaxHeight;
-
-  const BiometricTheme({
-    this.primaryColor,
-    this.backgroundColor,
-    this.errorColor,
-    this.titleStyle,
-    this.subtitleStyle,
-    this.buttonStyle,
-    this.sheetBorderRadius,
-    this.biometricIcon,
-    this.lockoutIcon,
-    this.sheetMaxHeight,
-  });
 }

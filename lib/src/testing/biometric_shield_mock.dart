@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 
 import '../core/biometric_config.dart';
 import '../core/biometric_result.dart';
-import '../core/biometric_session.dart';
 import '../core/biometric_shield.dart';
 import '../platform/biometric_capability.dart';
 import '../session/lockout_state.dart';
@@ -40,7 +39,7 @@ class BiometricShieldMock extends BiometricShieldMockBase {
   final LockoutState lockoutStateResult;
 
   /// Tracks calls to [authenticate].
-  final List<_AuthenticateCall> authenticateCalls = [];
+  final List<AuthenticateCall> authenticateCalls = [];
 
   /// Tracks calls to [storeToken].
   final List<String> storedTokens = [];
@@ -73,7 +72,7 @@ class BiometricShieldMock extends BiometricShieldMockBase {
     BuildContext? context,
     bool requireFresh = false,
   }) async {
-    authenticateCalls.add(_AuthenticateCall(
+    authenticateCalls.add(AuthenticateCall(
       reason: reason,
       userId: userId,
       requireFresh: requireFresh,
@@ -114,12 +113,12 @@ class BiometricShieldMock extends BiometricShieldMockBase {
 }
 
 /// Records a call to [authenticate] for verification in tests.
-class _AuthenticateCall {
+class AuthenticateCall {
   final String reason;
   final String? userId;
   final bool requireFresh;
 
-  const _AuthenticateCall({
+  const AuthenticateCall({
     required this.reason,
     this.userId,
     this.requireFresh = false,

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../core/biometric_config.dart';
-import '../core/biometric_result.dart';
 import '../core/biometric_session.dart';
 import '../analytics/biometric_event.dart';
 import '../analytics/event_type.dart';
@@ -18,14 +16,14 @@ import 'custom_fallback.dart';
 /// Walks through [BiometricConfig.fallbackChain] in order, attempting
 /// each fallback until one succeeds, all fail, or the user cancels.
 class FallbackChainExecutor {
-  final BiometricConfig _config;
-  final LocalAuthentication _localAuth;
 
   FallbackChainExecutor({
     required BiometricConfig config,
     LocalAuthentication? localAuth,
   })  : _config = config,
         _localAuth = localAuth ?? LocalAuthentication();
+  final BiometricConfig _config;
+  final LocalAuthentication _localAuth;
 
   /// Execute the fallback chain.
   ///
@@ -45,13 +43,13 @@ class FallbackChainExecutor {
           if (result == _FallbackResult.success) {
             _emitEvent(
                 BiometricEventType.fallbackSucceeded, userId, fallback);
-            return FallbackOutcome.success(
+            return const FallbackOutcome.success(
               method: BiometricFallback.deviceCredential,
               authMethod: BiometricAuthMethod.deviceCredential,
             );
           }
           if (result == _FallbackResult.cancelled) {
-            return FallbackOutcome.cancelled();
+            return const FallbackOutcome.cancelled();
           }
           _emitEvent(BiometricEventType.fallbackFailed, userId, fallback);
           continue;
@@ -75,17 +73,17 @@ class FallbackChainExecutor {
             );
           }
           if (result == _FallbackResult.cancelled) {
-            return FallbackOutcome.cancelled();
+            return const FallbackOutcome.cancelled();
           }
           _emitEvent(BiometricEventType.fallbackFailed, userId, fallback);
           continue;
 
         case BiometricFallback.none:
-          return FallbackOutcome.exhausted();
+          return const FallbackOutcome.exhausted();
       }
     }
 
-    return FallbackOutcome.exhausted();
+    return const FallbackOutcome.exhausted();
   }
 
   Future<_FallbackResult> _tryDeviceCredential(String reason) async {
@@ -164,27 +162,27 @@ sealed class FallbackOutcome {
   const factory FallbackOutcome.success({
     required BiometricFallback method,
     required BiometricAuthMethod authMethod,
-  }) = FallbackSuccess_;
+  }) = FallbackSuccessOutcome;
 
   /// User cancelled during fallback.
-  const factory FallbackOutcome.cancelled() = FallbackCancelled_;
+  const factory FallbackOutcome.cancelled() = FallbackCancelledOutcome;
 
   /// All fallbacks were exhausted without success.
-  const factory FallbackOutcome.exhausted() = FallbackExhausted_;
+  const factory FallbackOutcome.exhausted() = FallbackExhaustedOutcome;
 }
 
-class FallbackSuccess_ extends FallbackOutcome {
+class FallbackSuccessOutcome extends FallbackOutcome {
+  const FallbackSuccessOutcome({required this.method, required this.authMethod});
   final BiometricFallback method;
   final BiometricAuthMethod authMethod;
-  const FallbackSuccess_({required this.method, required this.authMethod});
 }
 
-class FallbackCancelled_ extends FallbackOutcome {
-  const FallbackCancelled_();
+class FallbackCancelledOutcome extends FallbackOutcome {
+  const FallbackCancelledOutcome();
 }
 
-class FallbackExhausted_ extends FallbackOutcome {
-  const FallbackExhausted_();
+class FallbackExhaustedOutcome extends FallbackOutcome {
+  const FallbackExhaustedOutcome();
 }
 
 enum _FallbackResult { success, failed, cancelled }

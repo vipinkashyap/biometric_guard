@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:biometric_shield/biometric_shield.dart';
 
@@ -30,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadSessionInfo() async {
     final hasSession = await BiometricShield.hasValidSession(userId: 'demo-user');
     final token = await BiometricShield.getToken(userId: 'demo-user');
-    final lockout = await BiometricShield.getLockoutState(userId: 'demo-user');
 
     setState(() {
       _sessionInfo = hasSession ? 'Active session' : 'No active session';
@@ -79,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     await BiometricShield.clearSession(userId: 'demo-user');
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/login');
+      unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
   }
 
@@ -156,12 +157,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   invalidated: () => 'Invalidated',
                   error: (m, _) => 'Error: $m',
                 );
+                // ignore: use_build_context_synchronously
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(status)),
                   );
                 }
-                _loadSessionInfo();
+                unawaited(_loadSessionInfo());
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Validate or Re-authenticate'),

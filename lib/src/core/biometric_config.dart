@@ -10,6 +10,27 @@ import '../ui/biometric_strings.dart';
 /// Pass this to [BiometricShield.configure] at app startup. Every field
 /// is optional — the SDK works with zero configuration using sensible defaults.
 class BiometricConfig {
+  const BiometricConfig({
+    this.sessionDuration = const Duration(minutes: 15),
+    this.sessionResetsOnActivity = true,
+    this.maxAttempts = 3,
+    this.lockoutDuration = const Duration(minutes: 5),
+    this.persistLockout = true,
+    this.fallbackChain = const [BiometricFallback.deviceCredential],
+    this.customPinBuilder,
+    this.tokenStore,
+    this.theme,
+    this.strings,
+    this.useCustomPromptUI = true,
+    this.onTokenExpired,
+    this.onLockoutStart,
+    this.onLockoutEnd,
+    this.onUserCancelled,
+    this.onBiometricInvalidated,
+    this.onEvent,
+    this.defaultUserId,
+  });
+
   // --- Session ---
 
   /// How long a successful auth remains valid before re-auth is required.
@@ -99,25 +120,4 @@ class BiometricConfig {
   /// Can be overridden per-call on [BiometricShield.authenticate].
   /// If null, uses a device-scoped default (single user scenario).
   final String? defaultUserId;
-
-  const BiometricConfig({
-    this.sessionDuration = const Duration(minutes: 15),
-    this.sessionResetsOnActivity = true,
-    this.maxAttempts = 3,
-    this.lockoutDuration = const Duration(minutes: 5),
-    this.persistLockout = true,
-    this.fallbackChain = const [BiometricFallback.deviceCredential],
-    this.customPinBuilder,
-    this.tokenStore,
-    this.theme,
-    this.strings,
-    this.useCustomPromptUI = true,
-    this.onTokenExpired,
-    this.onLockoutStart,
-    this.onLockoutEnd,
-    this.onUserCancelled,
-    this.onBiometricInvalidated,
-    this.onEvent,
-    this.defaultUserId,
-  });
 }

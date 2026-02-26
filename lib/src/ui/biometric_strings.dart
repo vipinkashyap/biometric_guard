@@ -3,6 +3,18 @@
 /// Pass this via [BiometricConfig.strings] to customize copy
 /// for localization or branding.
 class BiometricStrings {
+
+  const BiometricStrings({
+    this.authReason,
+    this.cancelButton,
+    this.useFallbackButton,
+    this.lockoutTitle,
+    this.lockoutMessage,
+    this.biometricUnavailableTitle,
+    this.biometricUnavailableMessage,
+    this.biometricInvalidatedTitle,
+    this.biometricInvalidatedMessage,
+  });
   /// Fallback auth reason if none is passed to [authenticate()].
   final String? authReason;
 
@@ -29,16 +41,4 @@ class BiometricStrings {
 
   /// Message shown when biometric keys are invalidated.
   final String? biometricInvalidatedMessage;
-
-  const BiometricStrings({
-    this.authReason,
-    this.cancelButton,
-    this.useFallbackButton,
-    this.lockoutTitle,
-    this.lockoutMessage,
-    this.biometricUnavailableTitle,
-    this.biometricUnavailableMessage,
-    this.biometricInvalidatedTitle,
-    this.biometricInvalidatedMessage,
-  });
 }

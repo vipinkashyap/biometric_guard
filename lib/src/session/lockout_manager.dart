@@ -12,6 +12,12 @@ import 'lockout_state.dart';
 /// Lockout data is optionally persisted across app restarts
 /// (controlled by [BiometricConfig.persistLockout]).
 class LockoutManager {
+
+  LockoutManager({
+    required BiometricConfig config,
+    TokenStoreInterface? store,
+  })  : _config = config,
+        _store = store ?? config.tokenStore ?? BiometricTokenStore();
   static const _lockoutKeyPrefix = 'lockout';
   static const _defaultUserId = '_device_default_';
 
@@ -20,12 +26,6 @@ class LockoutManager {
 
   /// In-memory lockout state keyed by userId.
   final Map<String, _LockoutData> _lockoutData = {};
-
-  LockoutManager({
-    required BiometricConfig config,
-    TokenStoreInterface? store,
-  })  : _config = config,
-        _store = store ?? config.tokenStore ?? BiometricTokenStore();
 
   /// Record a failed authentication attempt.
   ///
@@ -191,13 +191,13 @@ class LockoutManager {
 
 /// Internal lockout data representation.
 class _LockoutData {
-  final int attemptCount;
-  final bool isLockedOut;
-  final DateTime? lockedUntil;
 
   _LockoutData({
     required this.attemptCount,
     required this.isLockedOut,
     this.lockedUntil,
   });
+  final int attemptCount;
+  final bool isLockedOut;
+  final DateTime? lockedUntil;
 }

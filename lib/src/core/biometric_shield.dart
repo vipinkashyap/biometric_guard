@@ -80,7 +80,6 @@ class BiometricShield {
   }) async {
     _assertConfigured();
 
-    final config = _config!;
     final sessionMgr = _sessionManager!;
     final lockoutMgr = _lockoutManager!;
 
@@ -122,7 +121,7 @@ class BiometricShield {
       _PlatformAuthResult.failed => await _handleFailure(
           reason: reason,
           userId: userId,
-          context: context,
+          context: context, // ignore: use_build_context_synchronously
         ),
       _PlatformAuthResult.cancelled => _handleCancelled(userId),
       _PlatformAuthResult.notAvailable ||
@@ -130,7 +129,7 @@ class BiometricShield {
         await _handleUnavailable(
           reason: reason,
           userId: userId,
-          context: context,
+          context: context, // ignore: use_build_context_synchronously
           unavailableReason: biometricResult == _PlatformAuthResult.notEnrolled
               ? BiometricUnavailableReason.notEnrolled
               : BiometricUnavailableReason.notSupported,
@@ -244,10 +243,7 @@ class BiometricShield {
   /// @visibleForTesting
   static void configureMock(BiometricShieldMockBase mock) {
     _config = mock.config;
-    _mockInstance = mock;
   }
-
-  static BiometricShieldMockBase? _mockInstance;
 
   /// Reset all state. For testing only.
   /// @visibleForTesting
@@ -259,7 +255,6 @@ class BiometricShield {
     _iosHandler = null;
     _androidHandler = null;
     _fallbackChain = null;
-    _mockInstance = null;
   }
 
   // --- Private Helpers ---
@@ -361,12 +356,12 @@ class BiometricShield {
     );
 
     return switch (fallbackResult) {
-      FallbackSuccess_(:final authMethod) => await _handleSuccess(
+      FallbackSuccessOutcome(:final authMethod) => await _handleSuccess(
           userId: userId,
           method: authMethod,
         ),
-      FallbackCancelled_() => _handleCancelled(userId),
-      FallbackExhausted_() => const BiometricResult.unavailable(
+      FallbackCancelledOutcome() => _handleCancelled(userId),
+      FallbackExhaustedOutcome() => const BiometricResult.unavailable(
           reason: BiometricUnavailableReason.notSupported,
         ),
     };
@@ -392,12 +387,12 @@ class BiometricShield {
       );
 
       return switch (fallbackResult) {
-        FallbackSuccess_(:final authMethod) => await _handleSuccess(
+        FallbackSuccessOutcome(:final authMethod) => await _handleSuccess(
             userId: userId,
             method: authMethod,
           ),
-        FallbackCancelled_() => _handleCancelled(userId),
-        FallbackExhausted_() =>
+        FallbackCancelledOutcome() => _handleCancelled(userId),
+        FallbackExhaustedOutcome() =>
           BiometricResult.unavailable(reason: unavailableReason),
       };
     }

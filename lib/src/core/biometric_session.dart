@@ -15,6 +15,15 @@ enum BiometricAuthMethod {
 /// [isExpired] and [remainingValidity] to decide whether to
 /// trigger re-authentication.
 class BiometricSession {
+
+  const BiometricSession({
+    required this.sessionId,
+    required this.userId,
+    required this.authenticatedAt,
+    required this.expiresAt,
+    required this.methodUsed,
+    this.isActive = true,
+  });
   /// Unique identifier for this session.
   final String sessionId;
 
@@ -32,15 +41,6 @@ class BiometricSession {
 
   /// Whether this session is currently considered active.
   final bool isActive;
-
-  const BiometricSession({
-    required this.sessionId,
-    required this.userId,
-    required this.authenticatedAt,
-    required this.expiresAt,
-    required this.methodUsed,
-    this.isActive = true,
-  });
 
   /// Whether this session has expired based on the current time.
   bool get isExpired => DateTime.now().isAfter(expiresAt);

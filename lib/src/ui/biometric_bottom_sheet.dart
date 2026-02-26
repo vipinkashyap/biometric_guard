@@ -55,15 +55,15 @@ class BiometricBottomSheet {
 }
 
 class _LockoutSheet extends StatelessWidget {
-  final LockoutState lockoutState;
-  final BiometricTheme? theme;
-  final BiometricStrings? strings;
 
   const _LockoutSheet({
     required this.lockoutState,
     this.theme,
     this.strings,
   });
+  final LockoutState lockoutState;
+  final BiometricTheme? theme;
+  final BiometricStrings? strings;
 
   @override
   Widget build(BuildContext context) {
@@ -132,15 +132,15 @@ class _LockoutSheet extends StatelessWidget {
 }
 
 class _UnavailableSheet extends StatelessWidget {
-  final String reason;
-  final BiometricTheme? theme;
-  final BiometricStrings? strings;
 
   const _UnavailableSheet({
     required this.reason,
     this.theme,
     this.strings,
   });
+  final String reason;
+  final BiometricTheme? theme;
+  final BiometricStrings? strings;
 
   @override
   Widget build(BuildContext context) {

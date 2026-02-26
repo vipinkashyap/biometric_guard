@@ -9,10 +9,10 @@ import '../core/biometric_session.dart';
 /// via the [BiometricPrompt] API (SDK 28+), with fallback to
 /// the legacy fingerprint API for older devices.
 class AndroidHandler {
-  final LocalAuthentication _localAuth;
 
   AndroidHandler({LocalAuthentication? localAuth})
       : _localAuth = localAuth ?? LocalAuthentication();
+  final LocalAuthentication _localAuth;
 
   /// Attempt biometric authentication on Android.
   Future<AndroidAuthOutcome> authenticate({

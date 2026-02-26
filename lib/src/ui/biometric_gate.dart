@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/biometric_result.dart';
@@ -17,6 +19,18 @@ import '../core/biometric_result.dart';
 /// )
 /// ```
 class BiometricGate extends StatefulWidget {
+
+  const BiometricGate({
+    super.key,
+    required this.child,
+    required this.reason,
+    this.loadingWidget,
+    this.fallbackWidget,
+    this.onAuthenticated,
+    this.onAuthFailed,
+    this.reauthOnResume,
+    this.userId,
+  });
   /// The content to show after successful authentication.
   final Widget child;
 
@@ -43,18 +57,6 @@ class BiometricGate extends StatefulWidget {
 
   /// Override userId for this gate instance.
   final String? userId;
-
-  const BiometricGate({
-    super.key,
-    required this.child,
-    required this.reason,
-    this.loadingWidget,
-    this.fallbackWidget,
-    this.onAuthenticated,
-    this.onAuthFailed,
-    this.reauthOnResume,
-    this.userId,
-  });
 
   @override
   State<BiometricGate> createState() => _BiometricGateState();
@@ -101,19 +103,19 @@ class _BiometricGateState extends State<BiometricGate>
         success: (_, __) => _onSuccess(result),
         fallbackSuccess: (_, __, ___) => _onSuccess(result),
         sessionValid: (_, __) => _onSuccess(result),
-        tokenExpired: () => _onFailure(result),
-        cancelled: () => _onFailure(result),
-        lockedOut: (_) => _onFailure(result),
-        unavailable: (_) => _onFailure(result),
-        invalidated: () => _onFailure(result),
-        error: (_, __) => _onFailure(result),
+        tokenExpired: () => unawaited(_onFailure(result)),
+        cancelled: () => unawaited(_onFailure(result)),
+        lockedOut: (_) => unawaited(_onFailure(result)),
+        unavailable: (_) => unawaited(_onFailure(result)),
+        invalidated: () => unawaited(_onFailure(result)),
+        error: (_, __) => unawaited(_onFailure(result)),
       );
     } catch (e) {
       if (mounted) {
-        _onFailure(BiometricResult.error(
+        unawaited(_onFailure(BiometricResult.error(
           message: 'Authentication error: $e',
           cause: e,
-        ));
+        )));
       }
     }
   }
@@ -186,16 +188,16 @@ enum _GateStatus { loading, authenticated, failed }
 
 /// Static callback set by BiometricShield.configure() to enable
 /// BiometricGate to trigger authentication without a circular import.
-typedef _AuthenticateCallback = Future<BiometricResult> Function({
+typedef GateAuthenticateCallback = Future<BiometricResult> Function({
   required String reason,
   String? userId,
   BuildContext? context,
 });
 
-_AuthenticateCallback? _authenticateCallback;
+GateAuthenticateCallback? _authenticateCallback;
 
 /// Called by BiometricShield.configure() to wire up the gate.
 /// @internal
-void setGateAuthenticateCallback(_AuthenticateCallback callback) {
+void setGateAuthenticateCallback(GateAuthenticateCallback callback) {
   _authenticateCallback = callback;
 }

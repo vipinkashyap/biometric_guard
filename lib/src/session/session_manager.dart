@@ -14,6 +14,12 @@ import '../storage/biometric_token_store.dart';
 /// Handles session creation, validation, expiry, and activity-based
 /// extension. All session data is namespace-scoped by userId.
 class SessionManager {
+
+  SessionManager({
+    required BiometricConfig config,
+    TokenStoreInterface? store,
+  })  : _config = config,
+        _store = store ?? config.tokenStore ?? BiometricTokenStore();
   static const _sessionKeyPrefix = 'session';
   static const _defaultUserId = '_device_default_';
 
@@ -22,12 +28,6 @@ class SessionManager {
 
   /// In-memory cache of active sessions keyed by userId.
   final Map<String, BiometricSession> _activeSessions = {};
-
-  SessionManager({
-    required BiometricConfig config,
-    TokenStoreInterface? store,
-  })  : _config = config,
-        _store = store ?? config.tokenStore ?? BiometricTokenStore();
 
   /// Create a new session after successful authentication.
   Future<BiometricSession> createSession({
