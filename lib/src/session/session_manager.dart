@@ -230,7 +230,7 @@ class SessionManager {
       'userId': session.userId,
       'authenticatedAt': session.authenticatedAt.toIso8601String(),
       'expiresAt': session.expiresAt.toIso8601String(),
-      'methodUsed': session.methodUsed.index,
+      'methodUsed': session.methodUsed.name,
       'isActive': session.isActive,
     });
   }
@@ -246,13 +246,36 @@ class SessionManager {
         userId: map['userId'] as String,
         authenticatedAt: DateTime.parse(map['authenticatedAt'] as String),
         expiresAt: DateTime.parse(map['expiresAt'] as String),
-        methodUsed: BiometricAuthMethod.values[map['methodUsed'] as int],
+        methodUsed: _parseAuthMethod(map['methodUsed']),
         isActive: map['isActive'] as bool? ?? true,
       );
-    } catch (_) {
-      // Corrupted session data — clear it
+    } catch (e) {
+      // Corrupted session data — emit event and clear it
+      _emitEvent(BiometricEventType.sessionCleared, userId, null);
       await _store.delete(_sessionKey(userId));
       return null;
+    }
+  }
+
+  /// Parse auth method from stored value.
+  /// Supports both `.name` (new) and `.index` (legacy) formats.
+  BiometricAuthMethod _parseAuthMethod(dynamic value) {
+    if (value is String) {
+      return BiometricAuthMethod.values.byName(value);
+    }
+    if (value is int) {
+      // Legacy format — index-based
+      return BiometricAuthMethod.values[value];
+    }
+    return BiometricAuthMethod.fingerprint;
+  }
+
+  /// Dispose resources for a single user (clear sessions, close streams).
+  void disposeUser(String userId) {
+    _activeSessions.remove(userId);
+    final controller = _sessionStreamControllers.remove(userId);
+    if (controller != null && !controller.isClosed) {
+      controller.close();
     }
   }
 

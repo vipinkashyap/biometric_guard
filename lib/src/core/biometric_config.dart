@@ -32,7 +32,9 @@ class BiometricConfig {
     this.policyProvider,
     this.onEvent,
     this.defaultUserId,
-  });
+    this.authenticationTimeout = const Duration(seconds: 60),
+    this.verbose = false,
+  }) : assert(maxAttempts > 0, 'maxAttempts must be > 0');
 
   // --- Session ---
 
@@ -117,4 +119,18 @@ class BiometricConfig {
   /// Can be overridden per-call on [BiometricShield.authenticate].
   /// If null, uses a device-scoped default (single user scenario).
   final String? defaultUserId;
+
+  // --- Timeout ---
+
+  /// Maximum time to wait for the entire authentication flow to complete.
+  /// Includes platform prompt, fallback chain, and token lifecycle.
+  /// Default: 60 seconds. If exceeded, returns [BiometricResult.error].
+  final Duration authenticationTimeout;
+
+  // --- Debug ---
+
+  /// If true, the SDK prints debug information to the console.
+  /// Useful for integrators debugging authentication flows.
+  /// Default: false. Never enable in production.
+  final bool verbose;
 }

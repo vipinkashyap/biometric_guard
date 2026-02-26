@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:universal_io/io.dart' show Platform;
+
 import 'biometric_config.dart';
 import 'biometric_preferences.dart';
 import 'biometric_result.dart';
@@ -53,34 +56,49 @@ import '../analytics/event_type.dart';
 /// - Remember me (session persistence)
 /// - Custom session timeout
 /// - Reauth on resume
-class BiometricShield {
+class BiometricShield implements BiometricShieldInterface {
   /// Create a new BiometricShield instance with optional config.
   BiometricShield({this.config = const BiometricConfig()}) {
     _sessionManager = SessionManager(config: config);
     _lockoutManager = LockoutManager(config: config);
     _capabilityDetector = CapabilityDetector();
-    _iosHandler = IOSHandler();
-    _androidHandler = AndroidHandler();
     _fallbackChain = FallbackChainExecutor(config: config);
     _preferences = BiometricPreferences(
       store: config.tokenStore,
       defaultUserId: config.defaultUserId,
     );
+
+    // Platform handlers — instantiated based on detected platform.
+    // On unsupported platforms (desktop, web) both remain null and
+    // _attemptBiometric returns notAvailable.
+    try {
+      if (Platform.isIOS) {
+        _iosHandler = IOSHandler();
+      } else if (Platform.isAndroid) {
+        _androidHandler = AndroidHandler();
+      }
+    } catch (_) {
+      // Platform.isIOS/isAndroid can throw on web; ignore.
+    }
   }
 
+  @override
   final BiometricConfig config;
+
   late final SessionManager _sessionManager;
   late final LockoutManager _lockoutManager;
   late final CapabilityDetector _capabilityDetector;
-  late final IOSHandler _iosHandler;
-  late final AndroidHandler _androidHandler;
   late final FallbackChainExecutor _fallbackChain;
   late final BiometricPreferences _preferences;
 
+  IOSHandler? _iosHandler;
+  AndroidHandler? _androidHandler;
+
+  /// Concurrency guard — prevents double-tap / parallel auth races.
+  Completer<BiometricResult>? _authInProgress;
+
   /// User-facing preferences (remember me, enable/disable, etc).
-  ///
-  /// Access this to read/write preferences from your settings screen
-  /// or login screen. Preferences are persisted and namespaced per user.
+  @override
   BiometricPreferences get preferences => _preferences;
 
   // ═══════════════════════════════════════════════════════════
@@ -101,7 +119,60 @@ class BiometricShield {
   /// 5. Attempt biometric → fallback chain on failure
   /// 6. Validate & refresh token (if [TokenLifecycle] configured)
   /// 7. Create session → return result
+  ///
+  /// Respects [BiometricConfig.authenticationTimeout]. If the full flow
+  /// exceeds the timeout, returns [BiometricResult.error] with an
+  /// `authTimeout` event.
+  @override
   Future<BiometricResult> authenticate({
+    required String reason,
+    String? userId,
+    bool requireFresh = false,
+  }) async {
+    // Concurrency guard — if an auth is already running, wait for it.
+    if (_authInProgress != null) {
+      _log('authenticate() already in progress — awaiting existing call');
+      return _authInProgress!.future;
+    }
+
+    _authInProgress = Completer<BiometricResult>();
+    try {
+      final result = await Future.any<BiometricResult>([
+        _authenticateImpl(
+          reason: reason,
+          userId: userId,
+          requireFresh: requireFresh,
+        ),
+        _timeoutFuture(userId),
+      ]);
+      _authInProgress!.complete(result);
+      return result;
+    } catch (e) {
+      final errorResult = BiometricResult.error(
+        message: 'Unexpected error during authentication: $e',
+        cause: e,
+      );
+      _authInProgress!.complete(errorResult);
+      return errorResult;
+    } finally {
+      _authInProgress = null;
+    }
+  }
+
+  /// Returns a future that completes with a timeout error after
+  /// [BiometricConfig.authenticationTimeout].
+  Future<BiometricResult> _timeoutFuture(String? userId) async {
+    await Future<void>.delayed(config.authenticationTimeout);
+    _emitEvent(BiometricEventType.authTimeout, userId);
+    _log('authenticate() timed out after ${config.authenticationTimeout}');
+    return const BiometricResult.error(
+      message: 'Authentication timed out',
+      cause: null,
+    );
+  }
+
+  /// Core authentication implementation, called inside the timeout wrapper.
+  Future<BiometricResult> _authenticateImpl({
     required String reason,
     String? userId,
     bool requireFresh = false,
@@ -120,7 +191,6 @@ class BiometricShield {
       userId: userId,
     );
     if (!biometricEnabled && (policy?.requireBiometric != true)) {
-      // User disabled biometric, server doesn't force it — go to fallback
       return _handleUnavailable(
         reason: reason,
         userId: userId,
@@ -128,7 +198,7 @@ class BiometricShield {
       );
     }
 
-    // 3. Check lockout state (use effective max attempts from policy)
+    // 3. Check lockout state
     final lockoutState = await _lockoutManager.getLockoutState(userId: userId);
     if (lockoutState.isLockedOut) {
       _emitEvent(BiometricEventType.authFailed, userId, properties: {
@@ -144,8 +214,8 @@ class BiometricShield {
       final activeSession =
           await _sessionManager.getActiveSession(userId: userId);
       if (activeSession != null && !activeSession.isExpired) {
-        final token = await _resolveToken(userId: userId);
-        return token;
+        _log('Session still valid — resolving token');
+        return _validateAndResolveToken(session: activeSession, userId: userId);
       }
     }
 
@@ -189,12 +259,14 @@ class BiometricShield {
   }
 
   /// Check if current session is still valid without triggering auth.
+  @override
   Future<bool> hasValidSession({String? userId}) async {
     return _sessionManager.hasValidSession(userId: userId);
   }
 
   /// Validate session and re-authenticate if expired.
   /// Silent version — only shows UI if session has expired.
+  @override
   Future<BiometricResult> validateOrAuthenticate({
     required String reason,
     String? userId,
@@ -202,13 +274,51 @@ class BiometricShield {
     final activeSession =
         await _sessionManager.getActiveSession(userId: userId);
     if (activeSession != null && !activeSession.isExpired) {
-      return _resolveToken(userId: userId);
+      return _validateAndResolveToken(session: activeSession, userId: userId);
     }
 
     return authenticate(
       reason: reason,
       userId: userId,
     );
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  // Enrollment
+  // ═══════════════════════════════════════════════════════════
+
+  /// Check whether biometric enrollment has been completed.
+  ///
+  /// This checks the device's own enrollment status, not the app's.
+  /// Use [getCapability] for a richer picture.
+  @override
+  Future<bool> isEnrolled() async {
+    final capability = await _capabilityDetector.detect();
+    return capability.isEnrolled;
+  }
+
+  /// First-class enrollment: guide the user to enroll biometrics.
+  ///
+  /// On most platforms this means directing the user to system settings.
+  /// Emits [BiometricEventType.enrolled] on success or
+  /// [BiometricEventType.enrollmentDeclined] on failure/cancellation.
+  @override
+  Future<bool> enroll({String? userId}) async {
+    _log('enroll() called');
+    final capability = await _capabilityDetector.detect();
+    if (capability.isEnrolled) {
+      _emitEvent(BiometricEventType.enrolled, userId, properties: {
+        'alreadyEnrolled': true,
+      });
+      return true;
+    }
+
+    // Can't programmatically enroll — we can only check.
+    // Emit declined event and return false so the caller can show instructions.
+    _emitEvent(BiometricEventType.enrollmentDeclined, userId, properties: {
+      'reason': 'not_enrolled_on_device',
+    });
+    return false;
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -219,6 +329,7 @@ class BiometricShield {
   ///
   /// If [BiometricPreferences.isRememberMeEnabled] is false, this also
   /// clears the stored token (memory-only session).
+  @override
   Future<void> clearSession({String? userId}) async {
     await _sessionManager.clearSession(userId: userId);
 
@@ -230,22 +341,19 @@ class BiometricShield {
   }
 
   /// Clear all stored tokens and session state for a user.
+  @override
   Future<void> clearAll({String? userId}) async {
     await _sessionManager.clearAll(userId: userId);
   }
 
   /// Get a stream of session state changes for a user.
-  ///
-  /// Emits the current session (or null if none) immediately, then emits
-  /// updates whenever the session changes (created, cleared, or expired).
+  @override
   Stream<BiometricSession?> sessionStream({String? userId}) {
     return _sessionManager.sessionStream(userId: userId);
   }
 
   /// Notify the SDK that the user has performed an activity.
-  ///
-  /// If [BiometricConfig.sessionResetsOnActivity] is true, this extends
-  /// the session timeout. Otherwise, no effect.
+  @override
   void onActivity({String? userId}) {
     _sessionManager.onActivity(userId: userId);
   }
@@ -255,6 +363,7 @@ class BiometricShield {
   // ═══════════════════════════════════════════════════════════
 
   /// Detect what biometric capabilities this device has.
+  @override
   Future<BiometricCapability> getCapability() async {
     final capability = await _capabilityDetector.detect();
     _emitEvent(BiometricEventType.capabilityChecked, null, properties: {
@@ -270,15 +379,13 @@ class BiometricShield {
   // ═══════════════════════════════════════════════════════════
 
   /// Store a token securely, namespaced to userId.
-  ///
-  /// Call this after your server auth succeeds on first login.
-  /// If [BiometricPreferences.isRememberMeEnabled] is false, the token
-  /// is still stored but will be cleared when the session ends.
+  @override
   Future<void> storeToken(String token, {String? userId}) async {
     await _sessionManager.storeToken(token, userId: userId);
   }
 
   /// Retrieve the stored token after successful biometric auth.
+  @override
   Future<String?> getToken({String? userId}) async {
     return _sessionManager.getToken(userId: userId);
   }
@@ -288,11 +395,13 @@ class BiometricShield {
   // ═══════════════════════════════════════════════════════════
 
   /// Check if the user is currently locked out.
+  @override
   Future<LockoutState> getLockoutState({String? userId}) async {
     return _lockoutManager.getLockoutState(userId: userId);
   }
 
   /// Manually reset lockout (e.g. after admin override).
+  @override
   Future<void> resetLockout({String? userId}) async {
     await _lockoutManager.resetLockout(userId: userId);
   }
@@ -303,9 +412,22 @@ class BiometricShield {
 
   /// Clean up resources (close streams, timers, etc).
   /// Call this when the SDK instance is no longer needed.
+  @override
   void dispose() {
     _sessionManager.dispose();
     _lockoutManager.dispose();
+  }
+
+  /// Dispose resources for a single user without shutting down the SDK.
+  ///
+  /// Useful in multi-user scenarios when one user logs out but the SDK
+  /// continues to serve other users.
+  @override
+  Future<void> disposeUser({required String userId}) async {
+    await _sessionManager.clearAll(userId: userId);
+    await _preferences.clearAll(userId: userId);
+    await _lockoutManager.resetLockout(userId: userId);
+    _log('disposeUser($userId) — all data cleared');
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -317,42 +439,40 @@ class BiometricShield {
     if (config.policyProvider == null) return null;
     try {
       return await config.policyProvider!.getPolicy(userId: userId);
-    } catch (_) {
-      // Policy fetch failed — fall back to local config
+    } catch (e) {
+      // Policy fetch failed — emit event and fall back to local config
+      _emitEvent(BiometricEventType.policyFetchFailed, userId, properties: {
+        'error': e.toString(),
+      });
+      _log('Policy fetch failed: $e — using local config');
       return null;
     }
   }
 
   // ═══════════════════════════════════════════════════════════
-  // Private — Token Lifecycle
+  // Private — Token Lifecycle (deduplicated)
   // ═══════════════════════════════════════════════════════════
 
-  /// Resolve a token using the lifecycle handler if available.
+  /// Single method for token validation + lifecycle resolution.
   ///
-  /// Flow:
-  /// 1. Get token from storage
-  /// 2. If [TokenLifecycle] is configured, validate it
-  /// 3. If expired, attempt refresh
-  /// 4. Return appropriate result
-  Future<BiometricResult> _resolveToken({String? userId}) async {
-    final session = await _sessionManager.getActiveSession(userId: userId);
+  /// Used by both the "existing session" path and the "fresh auth" path
+  /// to eliminate the duplicated token validation logic.
+  Future<BiometricResult> _validateAndResolveToken({
+    required BiometricSession session,
+    String? userId,
+  }) async {
     final token = await _sessionManager.getToken(userId: userId);
 
-    // No token and no lifecycle handler — token expired
-    if (token == null && config.tokenLifecycle == null) {
-      _emitEvent(BiometricEventType.tokenExpired, userId);
-      return const BiometricResult.tokenExpired();
-    }
-
-    // No lifecycle handler — return whatever we have
+    // No lifecycle handler — return whatever we have.
     if (config.tokenLifecycle == null) {
-      return BiometricResult.sessionValid(
-        session: session!,
-        token: token,
-      );
+      if (token == null) {
+        _emitEvent(BiometricEventType.tokenExpired, userId);
+        return const BiometricResult.tokenExpired();
+      }
+      return BiometricResult.sessionValid(session: session, token: token);
     }
 
-    // Lifecycle handler configured — validate the token
+    // Lifecycle handler configured — validate.
     if (token == null) {
       _emitEvent(BiometricEventType.tokenExpired, userId);
       return const BiometricResult.tokenExpired();
@@ -360,28 +480,23 @@ class BiometricShield {
 
     final status = await config.tokenLifecycle!.validate(token);
 
-    switch (status) {
-      case TokenStatus.valid:
-        return BiometricResult.sessionValid(
-          session: session!,
+    return switch (status) {
+      TokenStatus.valid => BiometricResult.sessionValid(
+          session: session,
           token: token,
-        );
-
-      case TokenStatus.expired:
-        // Attempt refresh
-        return _attemptTokenRefresh(
+        ),
+      TokenStatus.expired => _attemptTokenRefresh(
           expiredToken: token,
-          session: session!,
+          session: session,
           userId: userId,
-        );
-
-      case TokenStatus.invalid:
-      case TokenStatus.missing:
-        _emitEvent(BiometricEventType.tokenExpired, userId, properties: {
-          'tokenStatus': status.name,
-        });
-        return const BiometricResult.tokenExpired();
-    }
+        ),
+      TokenStatus.invalid || TokenStatus.missing => () {
+          _emitEvent(BiometricEventType.tokenExpired, userId, properties: {
+            'tokenStatus': status.name,
+          });
+          return const BiometricResult.tokenExpired();
+        }(),
+    };
   }
 
   /// Attempt to refresh an expired token using the lifecycle handler.
@@ -400,7 +515,6 @@ class BiometricShield {
 
       switch (refreshResult) {
         case TokenRefreshSuccess(:final newToken, :final metadata):
-          // Store the refreshed token
           await _sessionManager.storeToken(newToken, userId: userId);
           _emitEvent(BiometricEventType.tokenStored, userId, properties: {
             'source': 'token_refresh',
@@ -418,7 +532,6 @@ class BiometricShield {
           );
 
         case TokenRefreshReauthRequired():
-          // Refresh token itself is expired — user must re-login
           await _sessionManager.clearSession(userId: userId);
           _emitEvent(BiometricEventType.sessionCleared, userId, properties: {
             'reason': 'reauth_required',
@@ -428,6 +541,10 @@ class BiometricShield {
           );
       }
     } catch (e) {
+      _emitEvent(BiometricEventType.authFailed, userId, properties: {
+        'error': 'token_refresh_error',
+        'message': e.toString(),
+      });
       return BiometricResult.error(
         message: 'Token refresh error: $e',
         cause: e,
@@ -439,33 +556,39 @@ class BiometricShield {
   // Private — Platform Auth Helpers
   // ═══════════════════════════════════════════════════════════
 
+  /// Attempt biometric auth using the correct platform handler.
+  ///
+  /// Uses [Platform.isIOS] / [Platform.isAndroid] to select the handler
+  /// rather than nested try/catch.
   Future<_PlatformAuthResult> _attemptBiometric({
     required String reason,
   }) async {
     try {
-      try {
-        final outcome = await _iosHandler.authenticate(reason: reason);
+      if (_iosHandler != null) {
+        final outcome = await _iosHandler!.authenticate(reason: reason);
         return _mapIOSOutcome(outcome);
-      } catch (_) {
-        try {
-          final outcome = await _androidHandler.authenticate(reason: reason);
-          return _mapAndroidOutcome(outcome);
-        } catch (_) {
-          return _PlatformAuthResult.notAvailable;
-        }
       }
+      if (_androidHandler != null) {
+        final outcome = await _androidHandler!.authenticate(reason: reason);
+        return _mapAndroidOutcome(outcome);
+      }
+      // Neither handler available (desktop, web, unsupported platform)
+      return _PlatformAuthResult.notAvailable;
     } catch (e) {
+      _emitEvent(BiometricEventType.authFailed, null, properties: {
+        'error': 'platform_auth_error',
+        'message': e.toString(),
+      });
+      _log('Platform auth error: $e');
       return _PlatformAuthResult.error;
     }
   }
 
   Future<BiometricAuthMethod> _detectMethod() async {
     try {
-      try {
-        return _iosHandler.detectMethod();
-      } catch (_) {
-        return _androidHandler.detectMethod();
-      }
+      if (_iosHandler != null) return _iosHandler!.detectMethod();
+      if (_androidHandler != null) return _androidHandler!.detectMethod();
+      return BiometricAuthMethod.fingerprint;
     } catch (_) {
       return BiometricAuthMethod.fingerprint;
     }
@@ -484,48 +607,23 @@ class BiometricShield {
       userId: userId,
     );
 
-    // Resolve token (with lifecycle handler if configured)
-    final token = await _sessionManager.getToken(userId: userId);
+    // Validate & resolve token through the single code path
+    final tokenResult =
+        await _validateAndResolveToken(session: session, userId: userId);
 
-    if (token == null && config.tokenLifecycle == null) {
-      _emitEvent(BiometricEventType.tokenExpired, userId);
-      return const BiometricResult.tokenExpired();
+    // Wrap sessionValid into success for fresh auth responses
+    if (tokenResult is BiometricSessionValid) {
+      _emitEvent(BiometricEventType.authSucceeded, userId, properties: {
+        'method': method.name,
+      });
+      return BiometricResult.success(
+        session: session,
+        token: tokenResult.token,
+      );
     }
 
-    // If lifecycle handler is configured, validate & potentially refresh
-    if (config.tokenLifecycle != null && token != null) {
-      final status = await config.tokenLifecycle!.validate(token);
-      if (status == TokenStatus.expired) {
-        final refreshed = await _attemptTokenRefresh(
-          expiredToken: token,
-          session: session,
-          userId: userId,
-        );
-        // If refresh succeeded, return the refreshed result
-        if (refreshed case BiometricSessionValid(:final token)) {
-          _emitEvent(BiometricEventType.authSucceeded, userId, properties: {
-            'method': method.name,
-            'tokenRefreshed': true,
-          });
-          return BiometricResult.success(
-            session: session,
-            token: token,
-          );
-        }
-        // If refresh failed, return that result
-        return refreshed;
-      }
-      if (status == TokenStatus.invalid || status == TokenStatus.missing) {
-        _emitEvent(BiometricEventType.tokenExpired, userId);
-        return const BiometricResult.tokenExpired();
-      }
-    }
-
-    _emitEvent(BiometricEventType.authSucceeded, userId, properties: {
-      'method': method.name,
-    });
-
-    return BiometricResult.success(session: session, token: token);
+    // Token expired or error — return as-is
+    return tokenResult;
   }
 
   Future<BiometricResult> _handleFailure({
@@ -622,6 +720,10 @@ class BiometricShield {
     };
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // Private — Utilities
+  // ═══════════════════════════════════════════════════════════
+
   void _emitEvent(
     BiometricEventType type,
     String? userId, {
@@ -633,6 +735,14 @@ class BiometricShield {
       timestamp: DateTime.now(),
       properties: properties,
     ));
+  }
+
+  /// Log a message when [BiometricConfig.verbose] is enabled.
+  void _log(String message) {
+    if (config.verbose) {
+      // ignore: avoid_print
+      print('[BiometricShield] $message');
+    }
   }
 }
 
@@ -647,6 +757,64 @@ enum _PlatformAuthResult {
   lockedOut,
   invalidated,
   error,
+}
+
+// ═══════════════════════════════════════════════════════════
+// Interface for DI & Mock Substitution
+// ═══════════════════════════════════════════════════════════
+
+/// Contract for [BiometricShield] that enables proper dependency injection
+/// and mock substitution in tests.
+///
+/// Implement or mock this interface instead of depending on the concrete
+/// [BiometricShield] class directly:
+///
+/// ```dart
+/// class AuthService {
+///   AuthService(this._shield);
+///   final BiometricShieldInterface _shield;
+///
+///   Future<bool> login() async {
+///     final result = await _shield.authenticate(reason: 'Login');
+///     return result is BiometricSuccess;
+///   }
+/// }
+/// ```
+abstract class BiometricShieldInterface {
+  BiometricConfig get config;
+  BiometricPreferences get preferences;
+
+  Future<BiometricResult> authenticate({
+    required String reason,
+    String? userId,
+    bool requireFresh = false,
+  });
+
+  Future<bool> hasValidSession({String? userId});
+
+  Future<BiometricResult> validateOrAuthenticate({
+    required String reason,
+    String? userId,
+  });
+
+  Future<bool> isEnrolled();
+  Future<bool> enroll({String? userId});
+
+  Future<void> clearSession({String? userId});
+  Future<void> clearAll({String? userId});
+  Stream<BiometricSession?> sessionStream({String? userId});
+  void onActivity({String? userId});
+
+  Future<BiometricCapability> getCapability();
+
+  Future<void> storeToken(String token, {String? userId});
+  Future<String?> getToken({String? userId});
+
+  Future<LockoutState> getLockoutState({String? userId});
+  Future<void> resetLockout({String? userId});
+
+  void dispose();
+  Future<void> disposeUser({required String userId});
 }
 
 /// Base class for mock implementations used in testing.

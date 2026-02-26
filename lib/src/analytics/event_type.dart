@@ -22,4 +22,8 @@ enum BiometricEventType {
   tokenExpired,
   tokenCleared,
   capabilityChecked,
+  authTimeout,
+  policyFetchFailed,
+  enrolled,
+  enrollmentDeclined,
 }

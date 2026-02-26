@@ -52,7 +52,8 @@ class BiometricPreferences {
   /// and go straight to fallback chain. Default: true.
   Future<bool> isBiometricEnabled({String? userId}) async {
     final raw = await _store.retrieve(_key('biometric_enabled', userId));
-    return raw != 'false'; // default true
+    // Explicit parsing — only 'true' or null (default) count as enabled.
+    return raw == null || raw == 'true';
   }
 
   /// Enable or disable biometric authentication.
@@ -84,7 +85,8 @@ class BiometricPreferences {
   /// Default: true
   Future<bool> isRememberMeEnabled({String? userId}) async {
     final raw = await _store.retrieve(_key('remember_me', userId));
-    return raw != 'false'; // default true
+    // Explicit parsing — only 'true' or null (default) count as enabled.
+    return raw == null || raw == 'true';
   }
 
   /// Set the "Remember Me" preference.
