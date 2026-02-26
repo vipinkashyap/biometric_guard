@@ -54,15 +54,6 @@ import '../analytics/event_type.dart';
 /// - Custom session timeout
 /// - Reauth on resume
 class BiometricShield {
-  final BiometricConfig config;
-  late final SessionManager _sessionManager;
-  late final LockoutManager _lockoutManager;
-  late final CapabilityDetector _capabilityDetector;
-  late final IOSHandler _iosHandler;
-  late final AndroidHandler _androidHandler;
-  late final FallbackChainExecutor _fallbackChain;
-  late final BiometricPreferences _preferences;
-
   /// Create a new BiometricShield instance with optional config.
   BiometricShield({this.config = const BiometricConfig()}) {
     _sessionManager = SessionManager(config: config);
@@ -76,6 +67,15 @@ class BiometricShield {
       defaultUserId: config.defaultUserId,
     );
   }
+
+  final BiometricConfig config;
+  late final SessionManager _sessionManager;
+  late final LockoutManager _lockoutManager;
+  late final CapabilityDetector _capabilityDetector;
+  late final IOSHandler _iosHandler;
+  late final AndroidHandler _androidHandler;
+  late final FallbackChainExecutor _fallbackChain;
+  late final BiometricPreferences _preferences;
 
   /// User-facing preferences (remember me, enable/disable, etc).
   ///

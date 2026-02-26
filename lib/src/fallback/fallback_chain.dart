@@ -45,7 +45,7 @@ class FallbackChainExecutor {
           if (result == _FallbackResult.success) {
             _emitEvent(
                 BiometricEventType.fallbackSucceeded, userId, fallback);
-            return FallbackSuccessOutcome(
+            return const FallbackSuccessOutcome(
               method: BiometricFallback.deviceCredential,
               authMethod: BiometricAuthMethod.deviceCredential,
             );

@@ -61,6 +61,13 @@ class CustomFallbackCallbacks {
 /// ));
 /// ```
 class MaterialFallbackHandler extends FallbackHandler {
+  MaterialFallbackHandler({
+    required this.context,
+    this.customBuilder,
+    this.theme,
+    this.strings,
+  });
+
   /// The BuildContext for showing bottom sheets and overlays.
   final BuildContext context;
 
@@ -73,13 +80,6 @@ class MaterialFallbackHandler extends FallbackHandler {
 
   /// String customization (copy, localization, etc).
   final BiometricStrings? strings;
-
-  MaterialFallbackHandler({
-    required this.context,
-    this.customBuilder,
-    this.theme,
-    this.strings,
-  });
 
   @override
   Future<FallbackResult> handleFallback({

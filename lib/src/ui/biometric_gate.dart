@@ -21,6 +21,18 @@ import 'biometric_builder.dart';
 /// )
 /// ```
 class BiometricGate extends StatelessWidget {
+  const BiometricGate({
+    super.key,
+    required this.shield,
+    required this.child,
+    required this.reason,
+    this.loadingWidget,
+    this.fallbackWidget,
+    this.onAuthenticated,
+    this.reauthOnResume = false,
+    this.userId,
+  });
+
   /// The BiometricShield instance to use.
   final BiometricShield shield;
 
@@ -47,18 +59,6 @@ class BiometricGate extends StatelessWidget {
 
   /// Override userId for this gate instance.
   final String? userId;
-
-  const BiometricGate({
-    super.key,
-    required this.shield,
-    required this.child,
-    required this.reason,
-    this.loadingWidget,
-    this.fallbackWidget,
-    this.onAuthenticated,
-    this.reauthOnResume = false,
-    this.userId,
-  });
 
   @override
   Widget build(BuildContext context) {

@@ -39,20 +39,20 @@ class AuthAuthenticating extends AuthState {
 
 /// Authentication succeeded and session is active.
 class AuthAuthenticated extends AuthState {
-  final BiometricSession session;
-  final String? token;
-
   const AuthAuthenticated({
     required this.session,
     required this.token,
   });
+
+  final BiometricSession session;
+  final String? token;
 }
 
 /// Authentication failed.
 class AuthFailed extends AuthState {
-  final BiometricResult result;
-
   const AuthFailed({required this.result});
+
+  final BiometricResult result;
 }
 
 /// Reactive widget that rebuilds when biometric auth state changes.
@@ -76,6 +76,16 @@ class AuthFailed extends AuthState {
 /// )
 /// ```
 class BiometricBuilder extends StatefulWidget {
+  const BiometricBuilder({
+    super.key,
+    required this.shield,
+    required this.reason,
+    this.userId,
+    this.reauthOnResume = false,
+    this.autoAuthenticate = true,
+    required this.builder,
+  });
+
   /// The BiometricShield instance to use for authentication.
   final BiometricShield shield;
 
@@ -100,16 +110,6 @@ class BiometricBuilder extends StatefulWidget {
   /// Called whenever the auth state changes. The caller controls all UI.
   final Widget Function(BuildContext context, AuthState state) builder;
 
-  const BiometricBuilder({
-    super.key,
-    required this.shield,
-    required this.reason,
-    this.userId,
-    this.reauthOnResume = false,
-    this.autoAuthenticate = true,
-    required this.builder,
-  });
-
   @override
   State<BiometricBuilder> createState() => _BiometricBuilderState();
 }
@@ -128,7 +128,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
     // Subscribe to session stream to react to session changes.
     _sessionSubscription =
         widget.shield.sessionStream(userId: widget.userId).listen((session) {
-      if (context.mounted) {
+      if (mounted) {
         if (session != null && !session.isExpired) {
           // Session is active — switch to authenticated state if not already there.
           if (_authState is! AuthAuthenticated) {
@@ -170,7 +170,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
   ///
   /// Can be called by parent widgets via [ScaffoldState.of] or similar.
   Future<void> _triggerAuthentication() async {
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     setState(() => _authState = const AuthAuthenticating());
 
@@ -179,7 +179,7 @@ class _BiometricBuilderState extends State<BiometricBuilder>
       userId: widget.userId,
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     result.when(
       success: (session, token) {
@@ -217,14 +217,14 @@ class _BiometricBuilderState extends State<BiometricBuilder>
 
   /// Validate existing session; re-authenticate if expired.
   Future<void> _validateOrReauth() async {
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     final result = await widget.shield.validateOrAuthenticate(
       reason: widget.reason,
       userId: widget.userId,
     );
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     result.when(
       success: (session, token) {

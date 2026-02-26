@@ -20,6 +20,28 @@ import '../session/lockout_state.dart';
 /// // Pass mockShield to code under test instead of real BiometricShield
 /// ```
 class BiometricShieldMock extends BiometricShieldMockBase {
+  BiometricShieldMock({
+    BiometricConfig? config,
+    this.authenticateResult = const BiometricResult.cancelled(),
+    this.hasValidSessionResult = false,
+    BiometricCapability? capabilityResult,
+    this.tokenResult,
+    LockoutState? lockoutStateResult,
+    this.sessionStreamResult,
+  })  : config = config ?? const BiometricConfig(),
+        capabilityResult = capabilityResult ??
+            const BiometricCapability(
+              isEnrolled: true,
+              hasStrongBiometric: true,
+              biometricLabel: 'Fingerprint',
+            ),
+        lockoutStateResult = lockoutStateResult ??
+            const LockoutState(
+              isLockedOut: false,
+              currentAttemptCount: 0,
+              maxAttempts: 3,
+            );
+
   @override
   final BiometricConfig config;
 
@@ -49,28 +71,6 @@ class BiometricShieldMock extends BiometricShieldMockBase {
 
   /// Tracks calls to [onActivity].
   final List<String?> onActivityCalls = [];
-
-  BiometricShieldMock({
-    BiometricConfig? config,
-    this.authenticateResult = const BiometricResult.cancelled(),
-    this.hasValidSessionResult = false,
-    BiometricCapability? capabilityResult,
-    this.tokenResult,
-    LockoutState? lockoutStateResult,
-    this.sessionStreamResult,
-  })  : config = config ?? const BiometricConfig(),
-        capabilityResult = capabilityResult ??
-            const BiometricCapability(
-              isEnrolled: true,
-              hasStrongBiometric: true,
-              biometricLabel: 'Fingerprint',
-            ),
-        lockoutStateResult = lockoutStateResult ??
-            const LockoutState(
-              isLockedOut: false,
-              currentAttemptCount: 0,
-              maxAttempts: 3,
-            );
 
   /// Simulate [BiometricShield.authenticate].
   Future<BiometricResult> authenticate({
@@ -159,13 +159,13 @@ class BiometricShieldMock extends BiometricShieldMockBase {
 
 /// Records a call to [authenticate] for verification in tests.
 class AuthenticateCall {
-  final String reason;
-  final String? userId;
-  final bool requireFresh;
-
   const AuthenticateCall({
     required this.reason,
     this.userId,
     this.requireFresh = false,
   });
+
+  final String reason;
+  final String? userId;
+  final bool requireFresh;
 }

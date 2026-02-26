@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:biometric_shield/biometric_shield.dart';
 import '../main.dart';
 import 'sensitive_data_screen.dart';
 
@@ -50,9 +49,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     final message = result.when(
-      success: (_, __) => 'Transfer authorized!',
-      fallbackSuccess: (_, __, ___) => 'Transfer authorized via fallback',
-      sessionValid: (_, __) => 'Session valid — transfer authorized',
+      success: (_, _) => 'Transfer authorized!',
+      fallbackSuccess: (_, _, _) => 'Transfer authorized via fallback',
+      sessionValid: (_, _) => 'Session valid — transfer authorized',
       tokenExpired: () => 'Token expired — cannot authorize',
       cancelled: () => 'Transfer cancelled by user',
       lockedOut: (until) => 'Locked out — try later',
@@ -62,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
       error: (msg, _) => 'Error: $msg',
     );
 
-    if (context.mounted) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -79,7 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Clear session and navigate back to login.
   Future<void> _logout() async {
     await shield.clearSession(userId: 'demo-user');
-    if (context.mounted) {
+    if (mounted) {
       unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
   }
@@ -151,9 +150,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   userId: 'demo-user',
                 );
                 final status = result.when(
-                  success: (_, __) => 'Fresh auth succeeded',
-                  fallbackSuccess: (_, __, ___) => 'Fallback auth succeeded',
-                  sessionValid: (_, __) => 'Session still valid — no prompt shown',
+                  success: (_, _) => 'Fresh auth succeeded',
+                  fallbackSuccess: (_, _, _) => 'Fallback auth succeeded',
+                  sessionValid: (_, _) => 'Session still valid — no prompt shown',
                   tokenExpired: () => 'Token expired',
                   cancelled: () => 'Cancelled',
                   lockedOut: (_) => 'Locked out',
@@ -162,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   reauthenticationRequired: (r) => r ?? 'Re-auth required',
                   error: (m, _) => 'Error: $m',
                 );
-                if (context.mounted) {
+                if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(status)),
                   );
