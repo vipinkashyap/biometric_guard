@@ -14,6 +14,9 @@ enum BiometricUnavailableReason {
 
   /// Too many system-level failures; temporarily unavailable.
   temporarilyUnavailable,
+
+  /// Server policy has disabled biometric authentication.
+  disabledByPolicy,
 }
 
 /// Sealed result type for all biometric authentication outcomes.
@@ -42,8 +45,8 @@ sealed class BiometricResult {
     required String? token,
   }) = BiometricSessionValid;
 
-  /// Auth succeeded but token was expired or missing.
-  /// [BiometricConfig.onTokenExpired] callback has been called if configured.
+  /// Auth succeeded but token was expired or missing,
+  /// and no [TokenLifecycle] was configured to auto-refresh.
   const factory BiometricResult.tokenExpired() = BiometricTokenExpired;
 
   /// User explicitly cancelled authentication.
@@ -57,10 +60,22 @@ sealed class BiometricResult {
   /// Biometric is not available or not enrolled on this device.
   const factory BiometricResult.unavailable({
     required BiometricUnavailableReason reason,
+    String? message,
   }) = BiometricUnavailable;
 
   /// Biometric keys were invalidated (new fingerprint enrolled etc).
   const factory BiometricResult.invalidated() = BiometricInvalidated;
+
+  /// Token refresh failed and the user must re-authenticate from scratch.
+  ///
+  /// This means the stored credential (refresh token, session, etc.) is no
+  /// longer valid. The consumer should navigate the user back to their
+  /// login/OAuth flow. This is distinct from [tokenExpired] — that means
+  /// "no lifecycle handler configured", while this means "the handler tried
+  /// to refresh and the refresh itself was rejected".
+  const factory BiometricResult.reauthenticationRequired({
+    String? reason,
+  }) = BiometricReauthenticationRequired;
 
   /// An unexpected platform error occurred.
   const factory BiometricResult.error({
@@ -76,8 +91,9 @@ sealed class BiometricResult {
     required T Function() tokenExpired,
     required T Function() cancelled,
     required T Function(DateTime lockedUntil) lockedOut,
-    required T Function(BiometricUnavailableReason reason) unavailable,
+    required T Function(BiometricUnavailableReason reason, String? message) unavailable,
     required T Function() invalidated,
+    required T Function(String? reason) reauthenticationRequired,
     required T Function(String message, Object? cause) error,
   }) {
     final self = this;
@@ -88,8 +104,9 @@ sealed class BiometricResult {
       BiometricTokenExpired() => tokenExpired(),
       BiometricCancelled() => cancelled(),
       BiometricLockedOut() => lockedOut(self.lockedUntil),
-      BiometricUnavailable() => unavailable(self.reason),
+      BiometricUnavailable() => unavailable(self.reason, self.message),
       BiometricInvalidated() => invalidated(),
+      BiometricReauthenticationRequired() => reauthenticationRequired(self.reason),
       BiometricError() => error(self.message, self.cause),
     };
   }
@@ -97,23 +114,23 @@ sealed class BiometricResult {
 
 /// Biometric auth succeeded. Session is now active.
 class BiometricSuccess extends BiometricResult {
-
   const BiometricSuccess({
     required this.session,
     required this.token,
   });
+
   final BiometricSession session;
   final String? token;
 }
 
 /// Biometric failed but a fallback succeeded.
 class BiometricFallbackSuccess extends BiometricResult {
-
   const BiometricFallbackSuccess({
     required this.methodUsed,
     required this.session,
     required this.token,
   });
+
   final BiometricFallback methodUsed;
   final BiometricSession session;
   final String? token;
@@ -121,11 +138,11 @@ class BiometricFallbackSuccess extends BiometricResult {
 
 /// Active session was found — no prompt shown.
 class BiometricSessionValid extends BiometricResult {
-
   const BiometricSessionValid({
     required this.session,
     required this.token,
   });
+
   final BiometricSession session;
   final String? token;
 }
@@ -142,20 +159,24 @@ class BiometricCancelled extends BiometricResult {
 
 /// Max attempts exceeded. User is locked out.
 class BiometricLockedOut extends BiometricResult {
-
   const BiometricLockedOut({
     required this.lockedUntil,
   });
+
   final DateTime lockedUntil;
 }
 
 /// Biometric is not available or not enrolled on this device.
 class BiometricUnavailable extends BiometricResult {
-
   const BiometricUnavailable({
     required this.reason,
+    this.message,
   });
+
   final BiometricUnavailableReason reason;
+
+  /// Optional human-readable message (e.g., server's disabledReason).
+  final String? message;
 }
 
 /// Biometric keys were invalidated (new fingerprint enrolled etc).
@@ -163,13 +184,21 @@ class BiometricInvalidated extends BiometricResult {
   const BiometricInvalidated();
 }
 
+/// Token refresh failed and the user must re-authenticate from scratch.
+class BiometricReauthenticationRequired extends BiometricResult {
+  const BiometricReauthenticationRequired({this.reason});
+
+  /// Optional reason why re-authentication is needed.
+  final String? reason;
+}
+
 /// An unexpected platform error occurred.
 class BiometricError extends BiometricResult {
-
   const BiometricError({
     required this.message,
     required this.cause,
   });
+
   final String message;
   final Object? cause;
 }

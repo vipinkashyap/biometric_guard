@@ -2,12 +2,22 @@ import '../analytics/biometric_event.dart';
 import '../fallback/fallback_type.dart';
 import '../fallback/fallback_handler.dart';
 import '../storage/token_store_interface.dart';
+import 'token_lifecycle.dart';
+import 'policy_provider.dart';
 
 /// Configuration object for the BiometricShield SDK.
 ///
 /// Pure Dart configuration without Flutter or UI dependencies.
 /// Pass this to [BiometricShield()] constructor. Every field is optional —
 /// the SDK works with zero configuration using sensible defaults.
+///
+/// ## Integration points:
+///
+/// - [tokenLifecycle] — Backend-agnostic token refresh (Firebase, REST, Supabase, etc.)
+/// - [policyProvider] — Server-driven policy enforcement (admin overrides, compliance)
+/// - [fallbackHandler] — Custom fallback UI (PIN, password, custom flows)
+/// - [tokenStore] — Custom secure storage backend
+/// - [onEvent] — Analytics/audit event stream
 class BiometricConfig {
   const BiometricConfig({
     this.sessionDuration = const Duration(minutes: 15),
@@ -18,6 +28,8 @@ class BiometricConfig {
     this.fallbackChain = const [BiometricFallback.deviceCredential],
     this.fallbackHandler,
     this.tokenStore,
+    this.tokenLifecycle,
+    this.policyProvider,
     this.onEvent,
     this.defaultUserId,
   });
@@ -26,6 +38,7 @@ class BiometricConfig {
 
   /// How long a successful auth remains valid before re-auth is required.
   /// Default: 15 minutes. Set to [Duration.zero] to require auth every time.
+  /// May be overridden by [PolicyProvider.getPolicy] at runtime.
   final Duration sessionDuration;
 
   /// If true, session timer resets on any app interaction.
@@ -36,11 +49,11 @@ class BiometricConfig {
   // --- Lockout ---
 
   /// Max failed biometric attempts before lockout triggers.
-  /// Default: 3
+  /// Default: 3. May be tightened by server policy.
   final int maxAttempts;
 
   /// How long the lockout lasts after [maxAttempts] is exceeded.
-  /// Default: 5 minutes
+  /// Default: 5 minutes. May be extended by server policy.
   final Duration lockoutDuration;
 
   /// If true, lockout state persists across app restarts.
@@ -64,6 +77,33 @@ class BiometricConfig {
   /// Custom token store implementation.
   /// If null, uses the default [BiometricTokenStore] implementation.
   final TokenStoreInterface? tokenStore;
+
+  // --- Token Lifecycle (Backend Integration) ---
+
+  /// Backend-agnostic token lifecycle handler.
+  ///
+  /// When configured, the SDK will:
+  /// 1. Validate stored tokens after biometric auth succeeds
+  /// 2. Auto-refresh expired tokens using [TokenLifecycle.refresh]
+  /// 3. Emit [BiometricResult.reauthenticationRequired] if refresh fails
+  ///
+  /// Without this, the SDK simply returns whatever is in storage,
+  /// and the caller handles expiry themselves.
+  ///
+  /// See [TokenLifecycle] for Firebase, REST API, and Supabase examples.
+  final TokenLifecycle? tokenLifecycle;
+
+  // --- Server Policy ---
+
+  /// Server-driven policy enforcement.
+  ///
+  /// When configured, the SDK calls [PolicyProvider.getPolicy] before each
+  /// authentication and merges the server policy with local config.
+  /// Server policy can enforce stricter session durations, lockout rules,
+  /// or disable biometric entirely.
+  ///
+  /// See [PolicyProvider] for implementation examples.
+  final PolicyProvider? policyProvider;
 
   // --- Analytics ---
 

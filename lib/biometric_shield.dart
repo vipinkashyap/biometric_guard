@@ -8,9 +8,12 @@ library biometric_shield;
 
 // Core
 export 'src/core/biometric_config.dart';
+export 'src/core/biometric_preferences.dart';
 export 'src/core/biometric_result.dart';
 export 'src/core/biometric_session.dart';
 export 'src/core/biometric_shield.dart';
+export 'src/core/policy_provider.dart';
+export 'src/core/token_lifecycle.dart';
 
 // Platform
 export 'src/platform/biometric_capability.dart';
