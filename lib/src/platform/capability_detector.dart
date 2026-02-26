@@ -44,10 +44,9 @@ class CapabilityDetector {
           hasStrong: hasStrong,
         ),
       );
-    } on Exception catch (e) {
+    } on Exception catch (_) {
       // If detection fails (platform error, web, etc), return a safe default.
       // Programming errors (Error) still propagate.
-      _ = e; // suppress unused warning
       return const BiometricCapability();
     }
   }
