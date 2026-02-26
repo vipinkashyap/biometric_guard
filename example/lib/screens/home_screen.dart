@@ -29,41 +29,57 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSessionInfo() async {
-    final hasSession = await shield.hasValidSession(userId: 'demo-user');
-    final token = await shield.getToken(userId: 'demo-user');
+    try {
+      final hasSession = await shield.hasValidSession(userId: 'demo-user');
+      final token = await shield.getToken(userId: 'demo-user');
 
-    setState(() {
-      _sessionInfo = hasSession ? 'Active session' : 'No active session';
-      _token = token != null
-          ? '${token.substring(0, 20)}...'
-          : 'No token stored';
-    });
+      if (!mounted) return;
+      setState(() {
+        _sessionInfo = hasSession ? 'Active session' : 'No active session';
+        _token = token != null
+            ? '${token.length > 20 ? token.substring(0, 20) : token}...'
+            : 'No token stored';
+      });
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _sessionInfo = 'Error loading session: $e';
+        _token = 'Error';
+      });
+    }
   }
 
   /// Programmatic re-auth for a one-off sensitive action.
   Future<void> _performSensitiveAction() async {
-    final result = await shield.authenticate(
-      reason: 'Confirm to transfer funds',
-      userId: 'demo-user',
-      requireFresh: true, // Force re-auth even if session is valid
-    );
+    try {
+      final result = await shield.authenticate(
+        reason: 'Confirm to transfer funds',
+        userId: 'demo-user',
+        requireFresh: true, // Force re-auth even if session is valid
+      );
 
-    final message = result.when(
-      success: (_, _) => 'Transfer authorized!',
-      fallbackSuccess: (_, _, _) => 'Transfer authorized via fallback',
-      sessionValid: (_, _) => 'Session valid — transfer authorized',
-      tokenExpired: () => 'Token expired — cannot authorize',
-      cancelled: () => 'Transfer cancelled by user',
-      lockedOut: (until) => 'Locked out — try later',
-      unavailable: (reason, message) => message ?? 'Biometric unavailable: ${reason.name}',
-      invalidated: () => 'Biometric invalidated',
-      reauthenticationRequired: (reason) => reason ?? 'Please sign in again',
-      error: (msg, _) => 'Error: $msg',
-    );
+      if (!mounted) return;
 
-    if (mounted) {
+      final message = result.when(
+        success: (_, _) => 'Transfer authorized!',
+        fallbackSuccess: (_, _, _) => 'Transfer authorized via fallback',
+        sessionValid: (_, _) => 'Session valid — transfer authorized',
+        tokenExpired: () => 'Token expired — cannot authorize',
+        cancelled: () => 'Transfer cancelled by user',
+        lockedOut: (until) => 'Locked out — try later',
+        unavailable: (reason, message) => message ?? 'Biometric unavailable: ${reason.name}',
+        invalidated: () => 'Biometric invalidated',
+        reauthenticationRequired: (reason) => reason ?? 'Please sign in again',
+        error: (msg, _) => 'Error: $msg',
+      );
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
       );
     }
   }
@@ -145,28 +161,34 @@ class _HomeScreenState extends State<HomeScreen> {
             // Validate or re-auth (silent)
             TextButton.icon(
               onPressed: () async {
-                final result = await shield.validateOrAuthenticate(
-                  reason: 'Verify session',
-                  userId: 'demo-user',
-                );
-                final status = result.when(
-                  success: (_, _) => 'Fresh auth succeeded',
-                  fallbackSuccess: (_, _, _) => 'Fallback auth succeeded',
-                  sessionValid: (_, _) => 'Session still valid — no prompt shown',
-                  tokenExpired: () => 'Token expired',
-                  cancelled: () => 'Cancelled',
-                  lockedOut: (_) => 'Locked out',
-                  unavailable: (r, msg) => msg ?? 'Unavailable: ${r.name}',
-                  invalidated: () => 'Invalidated',
-                  reauthenticationRequired: (r) => r ?? 'Re-auth required',
-                  error: (m, _) => 'Error: $m',
-                );
-                if (mounted) {
+                try {
+                  final result = await shield.validateOrAuthenticate(
+                    reason: 'Verify session',
+                    userId: 'demo-user',
+                  );
+                  if (!mounted) return;
+                  final status = result.when(
+                    success: (_, _) => 'Fresh auth succeeded',
+                    fallbackSuccess: (_, _, _) => 'Fallback auth succeeded',
+                    sessionValid: (_, _) => 'Session still valid — no prompt shown',
+                    tokenExpired: () => 'Token expired',
+                    cancelled: () => 'Cancelled',
+                    lockedOut: (_) => 'Locked out',
+                    unavailable: (r, msg) => msg ?? 'Unavailable: ${r.name}',
+                    invalidated: () => 'Invalidated',
+                    reauthenticationRequired: (r) => r ?? 'Re-auth required',
+                    error: (m, _) => 'Error: $m',
+                  );
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(status)),
                   );
+                  unawaited(_loadSessionInfo());
+                } on Exception catch (e) {
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
                 }
-                unawaited(_loadSessionInfo());
               },
               icon: const Icon(Icons.refresh),
               label: const Text('Validate or Re-authenticate'),

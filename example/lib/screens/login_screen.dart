@@ -38,23 +38,33 @@ class _LoginScreenState extends State<LoginScreen> {
       _statusMessage = 'Signing in...';
     });
 
-    // Simulate a server auth call (Amplify, Firebase, custom JWT, etc.)
-    await Future.delayed(const Duration(seconds: 1));
-    const fakeServerToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example';
+    try {
+      // Simulate a server auth call (Amplify, Firebase, custom JWT, etc.)
+      await Future.delayed(const Duration(seconds: 1));
+      const fakeServerToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example';
 
-    // Store the token for future biometric-gated access.
-    // This is the key integration point — after your server auth
-    // succeeds, hand the token to BiometricShield.
-    await shield.storeToken(
-      fakeServerToken,
-      userId: 'demo-user',
-    );
+      // Store the token for future biometric-gated access.
+      // This is the key integration point — after your server auth
+      // succeeds, hand the token to BiometricShield.
+      await shield.storeToken(
+        fakeServerToken,
+        userId: 'demo-user',
+      );
 
-    setState(() => _statusMessage = 'Token stored. You can now use biometrics.');
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Token stored. You can now use biometrics.';
+        _isLoading = false;
+      });
 
-    // Navigate to home
-    if (mounted) {
+      // Navigate to home
       unawaited(Navigator.of(context).pushReplacementNamed('/home'));
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Login failed: $e';
+        _isLoading = false;
+      });
     }
   }
 
@@ -66,68 +76,87 @@ class _LoginScreenState extends State<LoginScreen> {
       _statusMessage = 'Authenticating...';
     });
 
-    final result = await shield.authenticate(
-      reason: 'Unlock your account',
-      userId: 'demo-user',
-    );
+    try {
+      final result = await shield.authenticate(
+        reason: 'Unlock your account',
+        userId: 'demo-user',
+      );
 
-    result.when(
-      success: (session, token) {
-        setState(() => _statusMessage = 'Authenticated via ${session.methodUsed.name}');
-        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
-      },
-      fallbackSuccess: (method, session, token) {
-        setState(() => _statusMessage = 'Authenticated via fallback: ${method.name}');
-        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
-      },
-      sessionValid: (session, token) {
-        setState(() => _statusMessage = 'Session still valid');
-        unawaited(Navigator.of(context).pushReplacementNamed('/home'));
-      },
-      tokenExpired: () {
-        setState(() {
-          _statusMessage = 'Token expired — please sign in again';
-          _isLoading = false;
-        });
-      },
-      cancelled: () {
-        setState(() {
-          _statusMessage = 'Authentication cancelled';
-          _isLoading = false;
-        });
-      },
-      lockedOut: (until) {
-        final remaining = until.difference(DateTime.now());
-        setState(() {
-          _statusMessage = 'Locked out for ${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
-          _isLoading = false;
-        });
-      },
-      unavailable: (reason, message) {
-        setState(() {
-          _statusMessage = message ?? 'Biometric unavailable: ${reason.name}';
-          _isLoading = false;
-        });
-      },
-      invalidated: () {
-        setState(() {
-          _statusMessage = 'Biometric invalidated — please re-enroll';
-          _isLoading = false;
-        });
-      },
-      reauthenticationRequired: (reason) {
-        setState(() {
-          _statusMessage = reason ?? 'Session expired — please sign in again';
-          _isLoading = false;
-        });
-      },
-      error: (message, cause) {
-        setState(() {
-          _statusMessage = 'Error: $message';
-          _isLoading = false;
-        });
-      },
-    );
+      if (!mounted) return;
+
+      result.when(
+        success: (session, token) {
+          setState(() {
+            _statusMessage = 'Authenticated via ${session.methodUsed.name}';
+            _isLoading = false;
+          });
+          unawaited(Navigator.of(context).pushReplacementNamed('/home'));
+        },
+        fallbackSuccess: (method, session, token) {
+          setState(() {
+            _statusMessage = 'Authenticated via fallback: ${method.name}';
+            _isLoading = false;
+          });
+          unawaited(Navigator.of(context).pushReplacementNamed('/home'));
+        },
+        sessionValid: (session, token) {
+          setState(() {
+            _statusMessage = 'Session still valid';
+            _isLoading = false;
+          });
+          unawaited(Navigator.of(context).pushReplacementNamed('/home'));
+        },
+        tokenExpired: () {
+          setState(() {
+            _statusMessage = 'Token expired — please sign in again';
+            _isLoading = false;
+          });
+        },
+        cancelled: () {
+          setState(() {
+            _statusMessage = 'Authentication cancelled';
+            _isLoading = false;
+          });
+        },
+        lockedOut: (until) {
+          final remaining = until.difference(DateTime.now().toUtc());
+          setState(() {
+            _statusMessage = 'Locked out for ${remaining.inMinutes}m ${remaining.inSeconds % 60}s';
+            _isLoading = false;
+          });
+        },
+        unavailable: (reason, message) {
+          setState(() {
+            _statusMessage = message ?? 'Biometric unavailable: ${reason.name}';
+            _isLoading = false;
+          });
+        },
+        invalidated: () {
+          setState(() {
+            _statusMessage = 'Biometric invalidated — please re-enroll';
+            _isLoading = false;
+          });
+        },
+        reauthenticationRequired: (reason) {
+          setState(() {
+            _statusMessage = reason ?? 'Session expired — please sign in again';
+            _isLoading = false;
+          });
+        },
+        error: (message, cause) {
+          setState(() {
+            _statusMessage = 'Error: $message';
+            _isLoading = false;
+          });
+        },
+      );
+    } on Exception catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _statusMessage = 'Error: $e';
+        _isLoading = false;
+      });
+    }
   }
 
   @override
