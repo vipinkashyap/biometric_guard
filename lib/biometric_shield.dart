@@ -16,7 +16,7 @@ export 'src/platform/biometric_capability.dart';
 
 // Fallback
 export 'src/fallback/fallback_type.dart';
-export 'src/fallback/custom_fallback.dart';
+export 'src/fallback/fallback_handler.dart';
 
 // Storage
 export 'src/storage/token_store_interface.dart';

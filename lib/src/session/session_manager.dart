@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -29,6 +30,9 @@ class SessionManager {
   /// In-memory cache of active sessions keyed by userId.
   final Map<String, BiometricSession> _activeSessions = {};
 
+  /// Stream controllers for session state changes, keyed by userId.
+  final Map<String, StreamController<BiometricSession?>> _sessionStreamControllers = {};
+
   /// Create a new session after successful authentication.
   Future<BiometricSession> createSession({
     required BiometricAuthMethod method,
@@ -53,6 +57,9 @@ class SessionManager {
       _sessionKey(resolvedUserId),
       _encodeSession(session),
     );
+
+    // Emit stream event
+    _emitSessionStreamEvent(resolvedUserId, session);
 
     // Emit event
     _emitEvent(BiometricEventType.sessionStarted, resolvedUserId, method);
@@ -129,6 +136,7 @@ class SessionManager {
     final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
     _activeSessions.remove(resolvedUserId);
     await _store.delete(_sessionKey(resolvedUserId));
+    _emitSessionStreamEvent(resolvedUserId, null);
     _emitEvent(BiometricEventType.sessionCleared, resolvedUserId, null);
   }
 
@@ -141,6 +149,7 @@ class SessionManager {
     await _store.delete(_sessionKey(resolvedUserId));
     await _store.delete('$resolvedUserId:token');
     await _store.delete('$resolvedUserId:lockout');
+    _emitSessionStreamEvent(resolvedUserId, null);
   }
 
   // --- Token management ---
@@ -162,9 +171,58 @@ class SessionManager {
     return token;
   }
 
+  /// Get a stream of session state changes for a user.
+  ///
+  /// Emits the current session (or null if none) immediately, then emits
+  /// updates whenever the session changes (created, cleared, or expired).
+  Stream<BiometricSession?> sessionStream({String? userId}) {
+    final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
+
+    // Create controller if it doesn't exist
+    if (!_sessionStreamControllers.containsKey(resolvedUserId)) {
+      final controller = StreamController<BiometricSession?>.broadcast();
+      _sessionStreamControllers[resolvedUserId] = controller;
+
+      // Emit current session immediately
+      final currentSession = _activeSessions[resolvedUserId];
+      if (!controller.isClosed) {
+        controller.add(currentSession);
+      }
+    }
+
+    return _sessionStreamControllers[resolvedUserId]!.stream;
+  }
+
+  /// Notify listeners when a user becomes active (activity detected).
+  void onActivity({String? userId}) {
+    if (!_config.sessionResetsOnActivity) return;
+    final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
+    final session = _activeSessions[resolvedUserId];
+    if (session != null && !session.isExpired) {
+      _emitSessionStreamEvent(resolvedUserId, session);
+    }
+  }
+
+  /// Clean up resources (close stream controllers).
+  void dispose() {
+    for (final controller in _sessionStreamControllers.values) {
+      if (!controller.isClosed) {
+        controller.close();
+      }
+    }
+    _sessionStreamControllers.clear();
+  }
+
   // --- Private helpers ---
 
   String _sessionKey(String userId) => '$_sessionKeyPrefix:$userId';
+
+  void _emitSessionStreamEvent(String userId, BiometricSession? session) {
+    final controller = _sessionStreamControllers[userId];
+    if (controller != null && !controller.isClosed) {
+      controller.add(session);
+    }
+  }
 
   String _generateSessionId() {
     final timestamp = DateTime.now().microsecondsSinceEpoch.toString();

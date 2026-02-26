@@ -1,6 +1,4 @@
-import 'dart:io';
-
-import 'package:flutter/widgets.dart';
+import 'package:local_auth/local_auth.dart';
 
 import 'biometric_config.dart';
 import 'biometric_result.dart';
@@ -15,53 +13,32 @@ import '../session/lockout_manager.dart';
 import '../session/lockout_state.dart';
 import '../analytics/biometric_event.dart';
 import '../analytics/event_type.dart';
-import '../ui/biometric_gate.dart';
 
 /// Main entry point for the BiometricShield SDK.
 ///
-/// Call [configure] once at app startup, then use [authenticate],
-/// [hasValidSession], [storeToken], etc. throughout your app.
+/// Create an instance with [BiometricShield()] and call methods like
+/// [authenticate], [hasValidSession], [storeToken], etc. throughout your app.
 ///
-/// All methods are static for ergonomic access. The singleton
-/// pattern is internal — callers just call `BiometricShield.authenticate()`.
+/// Unlike the static API in v1, this is instance-based for better composability
+/// and testing. No Flutter imports — pure Dart business logic.
 class BiometricShield {
-  BiometricShield._();
+  final BiometricConfig config;
+  late final SessionManager _sessionManager;
+  late final LockoutManager _lockoutManager;
+  late final CapabilityDetector _capabilityDetector;
+  late final IOSHandler _iosHandler;
+  late final AndroidHandler _androidHandler;
+  late final FallbackChainExecutor _fallbackChain;
 
-  static BiometricConfig? _config;
-  static SessionManager? _sessionManager;
-  static LockoutManager? _lockoutManager;
-  static CapabilityDetector? _capabilityDetector;
-  static IOSHandler? _iosHandler;
-  static AndroidHandler? _androidHandler;
-  static FallbackChainExecutor? _fallbackChain;
-
-  /// Whether the SDK has been configured.
-  static bool get isConfigured => _config != null;
-
-  // --- Initialization ---
-
-  /// Initialize the SDK. Call once in `main()` or your auth module.
-  /// Must be called before any other method.
-  static Future<void> configure(BiometricConfig config) async {
-    _config = config;
+  /// Create a new BiometricShield instance with optional config.
+  BiometricShield({BiometricConfig config = const BiometricConfig()})
+      : config = config {
     _sessionManager = SessionManager(config: config);
     _lockoutManager = LockoutManager(config: config);
     _capabilityDetector = CapabilityDetector();
     _iosHandler = IOSHandler();
     _androidHandler = AndroidHandler();
     _fallbackChain = FallbackChainExecutor(config: config);
-
-    // Wire up BiometricGate to use our authenticate method
-    setGateAuthenticateCallback(({
-      required String reason,
-      String? userId,
-      BuildContext? context,
-    }) =>
-        authenticate(
-          reason: reason,
-          userId: userId,
-          context: context,
-        ));
   }
 
   // --- Authentication ---
@@ -70,21 +47,14 @@ class BiometricShield {
   ///
   /// [reason] — shown in platform biometric prompt.
   /// [userId] — overrides [BiometricConfig.defaultUserId] for this call.
-  /// [context] — required if fallback flow may show custom UI.
   /// [requireFresh] — if true, ignores active session and re-authenticates.
-  static Future<BiometricResult> authenticate({
+  Future<BiometricResult> authenticate({
     required String reason,
     String? userId,
-    BuildContext? context,
     bool requireFresh = false,
   }) async {
-    _assertConfigured();
-
-    final sessionMgr = _sessionManager!;
-    final lockoutMgr = _lockoutManager!;
-
     // 1. Check lockout state
-    final lockoutState = await lockoutMgr.getLockoutState(userId: userId);
+    final lockoutState = await _lockoutManager.getLockoutState(userId: userId);
     if (lockoutState.isLockedOut) {
       _emitEvent(BiometricEventType.authFailed, userId, properties: {
         'reason': 'locked_out',
@@ -97,9 +67,9 @@ class BiometricShield {
     // 2. Check existing session (unless requireFresh)
     if (!requireFresh) {
       final activeSession =
-          await sessionMgr.getActiveSession(userId: userId);
+          await _sessionManager.getActiveSession(userId: userId);
       if (activeSession != null && !activeSession.isExpired) {
-        final token = await sessionMgr.getToken(userId: userId);
+        final token = await _sessionManager.getToken(userId: userId);
         return BiometricResult.sessionValid(
           session: activeSession,
           token: token,
@@ -121,7 +91,6 @@ class BiometricShield {
       _PlatformAuthResult.failed => await _handleFailure(
           reason: reason,
           userId: userId,
-          context: context, // ignore: use_build_context_synchronously
         ),
       _PlatformAuthResult.cancelled => _handleCancelled(userId),
       _PlatformAuthResult.notAvailable ||
@@ -129,7 +98,6 @@ class BiometricShield {
         await _handleUnavailable(
           reason: reason,
           userId: userId,
-          context: context, // ignore: use_build_context_synchronously
           unavailableReason: biometricResult == _PlatformAuthResult.notEnrolled
               ? BiometricUnavailableReason.notEnrolled
               : BiometricUnavailableReason.notSupported,
@@ -149,24 +117,20 @@ class BiometricShield {
   }
 
   /// Check if current session is still valid without triggering auth.
-  static Future<bool> hasValidSession({String? userId}) async {
-    _assertConfigured();
-    return _sessionManager!.hasValidSession(userId: userId);
+  Future<bool> hasValidSession({String? userId}) async {
+    return _sessionManager.hasValidSession(userId: userId);
   }
 
   /// Validate session and re-authenticate if expired.
   /// Silent version — only shows UI if session has expired.
-  static Future<BiometricResult> validateOrAuthenticate({
+  Future<BiometricResult> validateOrAuthenticate({
     required String reason,
     String? userId,
-    BuildContext? context,
   }) async {
-    _assertConfigured();
-
     final activeSession =
-        await _sessionManager!.getActiveSession(userId: userId);
+        await _sessionManager.getActiveSession(userId: userId);
     if (activeSession != null && !activeSession.isExpired) {
-      final token = await _sessionManager!.getToken(userId: userId);
+      final token = await _sessionManager.getToken(userId: userId);
       return BiometricResult.sessionValid(
         session: activeSession,
         token: token,
@@ -176,30 +140,42 @@ class BiometricShield {
     return authenticate(
       reason: reason,
       userId: userId,
-      context: context,
     );
   }
 
   // --- Session Management ---
 
   /// Explicitly end the current session (e.g. on logout).
-  static Future<void> clearSession({String? userId}) async {
-    _assertConfigured();
-    await _sessionManager!.clearSession(userId: userId);
+  Future<void> clearSession({String? userId}) async {
+    await _sessionManager.clearSession(userId: userId);
   }
 
   /// Clear all stored tokens and session state for a user.
-  static Future<void> clearAll({String? userId}) async {
-    _assertConfigured();
-    await _sessionManager!.clearAll(userId: userId);
+  Future<void> clearAll({String? userId}) async {
+    await _sessionManager.clearAll(userId: userId);
+  }
+
+  /// Get a stream of session state changes for a user.
+  ///
+  /// Emits the current session (or null if none) immediately, then emits
+  /// updates whenever the session changes (created, cleared, or expired).
+  Stream<BiometricSession?> sessionStream({String? userId}) {
+    return _sessionManager.sessionStream(userId: userId);
+  }
+
+  /// Notify the SDK that the user has performed an activity.
+  ///
+  /// If [BiometricConfig.sessionResetsOnActivity] is true, this extends
+  /// the session timeout. Otherwise, no effect.
+  void onActivity({String? userId}) {
+    _sessionManager.onActivity(userId: userId);
   }
 
   // --- Device Capabilities ---
 
   /// Detect what biometric capabilities this device has.
-  static Future<BiometricCapability> getCapability() async {
-    _assertConfigured();
-    final capability = await _capabilityDetector!.detect();
+  Future<BiometricCapability> getCapability() async {
+    final capability = await _capabilityDetector.detect();
     _emitEvent(BiometricEventType.capabilityChecked, null, properties: {
       'hasBiometric': capability.hasBiometric,
       'isEnrolled': capability.isEnrolled,
@@ -212,116 +188,93 @@ class BiometricShield {
 
   /// Store a token securely, namespaced to userId.
   /// Call this after your server auth succeeds on first login.
-  static Future<void> storeToken(String token, {String? userId}) async {
-    _assertConfigured();
-    await _sessionManager!.storeToken(token, userId: userId);
+  Future<void> storeToken(String token, {String? userId}) async {
+    await _sessionManager.storeToken(token, userId: userId);
   }
 
   /// Retrieve the stored token after successful biometric auth.
-  static Future<String?> getToken({String? userId}) async {
-    _assertConfigured();
-    return _sessionManager!.getToken(userId: userId);
+  Future<String?> getToken({String? userId}) async {
+    return _sessionManager.getToken(userId: userId);
   }
 
   // --- Lockout Management ---
 
   /// Check if the user is currently locked out.
-  static Future<LockoutState> getLockoutState({String? userId}) async {
-    _assertConfigured();
-    return _lockoutManager!.getLockoutState(userId: userId);
+  Future<LockoutState> getLockoutState({String? userId}) async {
+    return _lockoutManager.getLockoutState(userId: userId);
   }
 
   /// Manually reset lockout (e.g. after admin override).
-  static Future<void> resetLockout({String? userId}) async {
-    _assertConfigured();
-    await _lockoutManager!.resetLockout(userId: userId);
+  Future<void> resetLockout({String? userId}) async {
+    await _lockoutManager.resetLockout(userId: userId);
   }
 
-  // --- Testing Support ---
+  // --- Resource Management ---
 
-  /// Replace the SDK internals with a mock for testing.
-  /// @visibleForTesting
-  static void configureMock(BiometricShieldMockBase mock) {
-    _config = mock.config;
-  }
-
-  /// Reset all state. For testing only.
-  /// @visibleForTesting
-  static void reset() {
-    _config = null;
-    _sessionManager = null;
-    _lockoutManager = null;
-    _capabilityDetector = null;
-    _iosHandler = null;
-    _androidHandler = null;
-    _fallbackChain = null;
+  /// Clean up resources (close streams, timers, etc).
+  /// Call this when the SDK instance is no longer needed.
+  void dispose() {
+    _sessionManager.dispose();
+    _lockoutManager.dispose();
   }
 
   // --- Private Helpers ---
 
-  static void _assertConfigured() {
-    if (_config == null) {
-      throw StateError(
-        'BiometricShield not configured. '
-        'Call BiometricShield.configure() before using the SDK.',
-      );
-    }
-  }
-
-  static Future<_PlatformAuthResult> _attemptBiometric({
+  Future<_PlatformAuthResult> _attemptBiometric({
     required String reason,
   }) async {
     try {
-      if (Platform.isIOS) {
-        final outcome =
-            await _iosHandler!.authenticate(reason: reason);
+      // Platform detection: try to use iOS handler, fall back to Android
+      // If neither platform is available, return notAvailable
+      try {
+        final outcome = await _iosHandler.authenticate(reason: reason);
         return _mapIOSOutcome(outcome);
-      } else if (Platform.isAndroid) {
-        final outcome =
-            await _androidHandler!.authenticate(reason: reason);
-        return _mapAndroidOutcome(outcome);
+      } catch (_) {
+        // Not iOS or iOS handler failed; try Android
+        try {
+          final outcome = await _androidHandler.authenticate(reason: reason);
+          return _mapAndroidOutcome(outcome);
+        } catch (_) {
+          // Both failed
+          return _PlatformAuthResult.notAvailable;
+        }
       }
-      return _PlatformAuthResult.notAvailable;
     } catch (e) {
       return _PlatformAuthResult.error;
     }
   }
 
-  static Future<BiometricAuthMethod> _detectMethod() async {
+  Future<BiometricAuthMethod> _detectMethod() async {
     try {
-      if (Platform.isIOS) {
-        return _iosHandler!.detectMethod();
-      } else {
-        return _androidHandler!.detectMethod();
+      try {
+        return _iosHandler.detectMethod();
+      } catch (_) {
+        return _androidHandler.detectMethod();
       }
     } catch (_) {
       return BiometricAuthMethod.fingerprint;
     }
   }
 
-  static Future<BiometricResult> _handleSuccess({
+  Future<BiometricResult> _handleSuccess({
     String? userId,
     required BiometricAuthMethod method,
   }) async {
     // Reset lockout counter on success
-    await _lockoutManager!.onSuccess(userId: userId);
+    await _lockoutManager.onSuccess(userId: userId);
 
     // Create session
-    final session = await _sessionManager!.createSession(
+    final session = await _sessionManager.createSession(
       method: method,
       userId: userId,
     );
 
     // Retrieve token
-    final token = await _sessionManager!.getToken(userId: userId);
+    final token = await _sessionManager.getToken(userId: userId);
 
     // Check for expired/missing token
     if (token == null) {
       _emitEvent(BiometricEventType.tokenExpired, userId);
-      if (_config!.onTokenExpired != null) {
-        await _config!.onTokenExpired!();
-        return const BiometricResult.tokenExpired();
-      }
       return const BiometricResult.tokenExpired();
     }
 
@@ -332,16 +285,15 @@ class BiometricShield {
     return BiometricResult.success(session: session, token: token);
   }
 
-  static Future<BiometricResult> _handleFailure({
+  Future<BiometricResult> _handleFailure({
     required String reason,
     String? userId,
-    BuildContext? context,
   }) async {
     _emitEvent(BiometricEventType.authFailed, userId);
 
     // Record failure and check lockout
     final lockoutState =
-        await _lockoutManager!.recordFailure(userId: userId);
+        await _lockoutManager.recordFailure(userId: userId);
     if (lockoutState.isLockedOut) {
       return BiometricResult.lockedOut(
         lockedUntil: lockoutState.lockedUntil!,
@@ -349,9 +301,8 @@ class BiometricShield {
     }
 
     // Try fallback chain
-    final fallbackResult = await _fallbackChain!.execute(
+    final fallbackResult = await _fallbackChain.execute(
       reason: reason,
-      context: context,
       userId: userId,
     );
 
@@ -367,22 +318,20 @@ class BiometricShield {
     };
   }
 
-  static BiometricResult _handleCancelled(String? userId) {
-    _config?.onUserCancelled?.call();
+  BiometricResult _handleCancelled(String? userId) {
+    _emitEvent(BiometricEventType.authCancelled, userId);
     return const BiometricResult.cancelled();
   }
 
-  static Future<BiometricResult> _handleUnavailable({
+  Future<BiometricResult> _handleUnavailable({
     required String reason,
     String? userId,
-    BuildContext? context,
     required BiometricUnavailableReason unavailableReason,
   }) async {
     // Try fallback chain even when biometric is unavailable
-    if (_config!.fallbackChain.isNotEmpty) {
-      final fallbackResult = await _fallbackChain!.execute(
+    if (config.fallbackChain.isNotEmpty) {
+      final fallbackResult = await _fallbackChain.execute(
         reason: reason,
-        context: context,
         userId: userId,
       );
 
@@ -400,13 +349,12 @@ class BiometricShield {
     return BiometricResult.unavailable(reason: unavailableReason);
   }
 
-  static BiometricResult _handleInvalidated(String? userId) {
-    _config?.onBiometricInvalidated?.call();
+  BiometricResult _handleInvalidated(String? userId) {
     _emitEvent(BiometricEventType.biometricInvalidated, userId);
     return const BiometricResult.invalidated();
   }
 
-  static _PlatformAuthResult _mapIOSOutcome(IOSAuthOutcome outcome) {
+  _PlatformAuthResult _mapIOSOutcome(IOSAuthOutcome outcome) {
     return switch (outcome) {
       IOSAuthOutcome.success => _PlatformAuthResult.success,
       IOSAuthOutcome.failed => _PlatformAuthResult.failed,
@@ -419,7 +367,7 @@ class BiometricShield {
     };
   }
 
-  static _PlatformAuthResult _mapAndroidOutcome(AndroidAuthOutcome outcome) {
+  _PlatformAuthResult _mapAndroidOutcome(AndroidAuthOutcome outcome) {
     return switch (outcome) {
       AndroidAuthOutcome.success => _PlatformAuthResult.success,
       AndroidAuthOutcome.failed => _PlatformAuthResult.failed,
@@ -432,14 +380,14 @@ class BiometricShield {
     };
   }
 
-  static void _emitEvent(
+  void _emitEvent(
     BiometricEventType type,
     String? userId, {
     Map<String, dynamic> properties = const {},
   }) {
-    _config?.onEvent?.call(BiometricEvent(
+    config.onEvent?.call(BiometricEvent(
       type: type,
-      userId: userId ?? _config?.defaultUserId ?? '_device_default_',
+      userId: userId ?? config.defaultUserId ?? '_device_default_',
       timestamp: DateTime.now(),
       properties: properties,
     ));
@@ -462,6 +410,8 @@ enum _PlatformAuthResult {
 /// Base class for mock implementations used in testing.
 ///
 /// Extend this to create test doubles for [BiometricShield].
+/// Unlike the old static API, tests now pass a mock instance directly
+/// to the code under test (dependency injection pattern).
 abstract class BiometricShieldMockBase {
   BiometricConfig get config;
 }

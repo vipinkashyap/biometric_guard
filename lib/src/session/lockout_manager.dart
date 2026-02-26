@@ -60,7 +60,6 @@ class LockoutManager {
     if (data.isLockedOut && data.lockedUntil != null) {
       if (DateTime.now().isAfter(data.lockedUntil!)) {
         await _resetData(resolvedUserId);
-        _config.onLockoutEnd?.call();
         _emitEvent(BiometricEventType.lockoutEnded, resolvedUserId);
         return LockoutState(
           isLockedOut: false,
@@ -86,6 +85,11 @@ class LockoutManager {
     await _resetData(resolvedUserId);
   }
 
+  /// Clean up resources. Currently a no-op but available for future use.
+  void dispose() {
+    // No resources to clean up currently, but keeping for API consistency
+  }
+
   // --- Private helpers ---
 
   Future<LockoutState> _recordNewFailure(String resolvedUserId) async {
@@ -101,7 +105,6 @@ class LockoutManager {
         lockedUntil: lockedUntil,
       );
 
-      _config.onLockoutStart?.call(lockedUntil);
       _emitEvent(BiometricEventType.lockoutStarted, resolvedUserId);
     } else {
       data = _LockoutData(

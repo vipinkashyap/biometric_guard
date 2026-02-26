@@ -1,23 +1,23 @@
-import 'package:flutter/widgets.dart';
-
 import '../core/biometric_config.dart';
 import '../core/biometric_result.dart';
+import '../core/biometric_session.dart';
 import '../core/biometric_shield.dart';
 import '../platform/biometric_capability.dart';
 import '../session/lockout_state.dart';
 
-/// A full mock implementation of the BiometricShield API for testing.
+/// A base mock implementation of the BiometricShield API for testing.
 ///
-/// Configure the mock with predefined results, then call
-/// [BiometricShield.configureMock] to inject it.
+/// Create an instance with predefined results and pass it to your code
+/// under test (dependency injection pattern).
 ///
 /// ```dart
-/// BiometricShield.configureMock(BiometricShieldMock(
+/// final mockShield = BiometricShieldMock(
 ///   authenticateResult: BiometricResult.success(
 ///     session: FakeBiometricSession.active(),
 ///     token: 'fake-token',
 ///   ),
-/// ));
+/// );
+/// // Pass mockShield to code under test instead of real BiometricShield
 /// ```
 class BiometricShieldMock extends BiometricShieldMockBase {
   @override
@@ -38,11 +38,17 @@ class BiometricShieldMock extends BiometricShieldMockBase {
   /// Result returned by [getLockoutState].
   final LockoutState lockoutStateResult;
 
+  /// Result returned by [sessionStream].
+  final BiometricSession? sessionStreamResult;
+
   /// Tracks calls to [authenticate].
   final List<AuthenticateCall> authenticateCalls = [];
 
   /// Tracks calls to [storeToken].
   final List<String> storedTokens = [];
+
+  /// Tracks calls to [onActivity].
+  final List<String?> onActivityCalls = [];
 
   BiometricShieldMock({
     BiometricConfig? config,
@@ -51,6 +57,7 @@ class BiometricShieldMock extends BiometricShieldMockBase {
     BiometricCapability? capabilityResult,
     this.tokenResult,
     LockoutState? lockoutStateResult,
+    this.sessionStreamResult,
   })  : config = config ?? const BiometricConfig(),
         capabilityResult = capabilityResult ??
             const BiometricCapability(
@@ -69,7 +76,6 @@ class BiometricShieldMock extends BiometricShieldMockBase {
   Future<BiometricResult> authenticate({
     required String reason,
     String? userId,
-    BuildContext? context,
     bool requireFresh = false,
   }) async {
     authenticateCalls.add(AuthenticateCall(
@@ -83,6 +89,14 @@ class BiometricShieldMock extends BiometricShieldMockBase {
   /// Simulate [BiometricShield.hasValidSession].
   Future<bool> hasValidSession({String? userId}) async {
     return hasValidSessionResult;
+  }
+
+  /// Simulate [BiometricShield.validateOrAuthenticate].
+  Future<BiometricResult> validateOrAuthenticate({
+    required String reason,
+    String? userId,
+  }) async {
+    return authenticate(reason: reason, userId: userId);
   }
 
   /// Simulate [BiometricShield.getCapability].
@@ -105,10 +119,41 @@ class BiometricShieldMock extends BiometricShieldMockBase {
     storedTokens.add(token);
   }
 
+  /// Simulate [BiometricShield.clearSession].
+  Future<void> clearSession({String? userId}) async {
+    // No-op
+  }
+
+  /// Simulate [BiometricShield.clearAll].
+  Future<void> clearAll({String? userId}) async {
+    // No-op
+  }
+
+  /// Simulate [BiometricShield.sessionStream].
+  Stream<BiometricSession?> sessionStream({String? userId}) async* {
+    yield sessionStreamResult;
+  }
+
+  /// Simulate [BiometricShield.onActivity].
+  void onActivity({String? userId}) {
+    onActivityCalls.add(userId);
+  }
+
+  /// Simulate [BiometricShield.resetLockout].
+  Future<void> resetLockout({String? userId}) async {
+    // No-op
+  }
+
+  /// Simulate [BiometricShield.dispose].
+  void dispose() {
+    // No-op
+  }
+
   /// Reset all tracked calls.
   void resetCalls() {
     authenticateCalls.clear();
     storedTokens.clear();
+    onActivityCalls.clear();
   }
 }
 

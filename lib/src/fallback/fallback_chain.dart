@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/widgets.dart';
 import 'package:local_auth/local_auth.dart';
 
 import '../core/biometric_config.dart';
@@ -8,13 +7,13 @@ import '../core/biometric_session.dart';
 import '../analytics/biometric_event.dart';
 import '../analytics/event_type.dart';
 import 'fallback_type.dart';
-import 'custom_fallback.dart';
+import 'fallback_handler.dart';
 
-/// Orchestrates the fallback chain when biometric auth fails
-/// or is unavailable.
+/// Orchestrates the fallback chain when biometric auth fails or is unavailable.
 ///
-/// Walks through [BiometricConfig.fallbackChain] in order, attempting
-/// each fallback until one succeeds, all fail, or the user cancels.
+/// Pure Dart orchestrator (no Flutter imports). Walks through
+/// [BiometricConfig.fallbackChain] in order, attempting each fallback
+/// until one succeeds, all fail, or the user cancels.
 class FallbackChainExecutor {
 
   FallbackChainExecutor({
@@ -22,6 +21,7 @@ class FallbackChainExecutor {
     LocalAuthentication? localAuth,
   })  : _config = config,
         _localAuth = localAuth ?? LocalAuthentication();
+
   final BiometricConfig _config;
   final LocalAuthentication _localAuth;
 
@@ -29,9 +29,11 @@ class FallbackChainExecutor {
   ///
   /// Returns a [FallbackOutcome] indicating which fallback succeeded,
   /// or that all fallbacks were exhausted / user cancelled.
+  ///
+  /// Note: No BuildContext parameter — custom fallbacks are handled
+  /// by the configured [FallbackHandler] in the UI layer.
   Future<FallbackOutcome> execute({
     required String reason,
-    BuildContext? context,
     String? userId,
   }) async {
     for (final fallback in _config.fallbackChain) {
@@ -43,29 +45,31 @@ class FallbackChainExecutor {
           if (result == _FallbackResult.success) {
             _emitEvent(
                 BiometricEventType.fallbackSucceeded, userId, fallback);
-            return const FallbackOutcome.success(
+            return FallbackSuccessOutcome(
               method: BiometricFallback.deviceCredential,
               authMethod: BiometricAuthMethod.deviceCredential,
             );
           }
           if (result == _FallbackResult.cancelled) {
-            return const FallbackOutcome.cancelled();
+            return const FallbackCancelledOutcome();
           }
           _emitEvent(BiometricEventType.fallbackFailed, userId, fallback);
           continue;
 
         case BiometricFallback.customPin:
         case BiometricFallback.customPassword:
-          if (_config.customPinBuilder == null || context == null) {
+          if (_config.fallbackHandler == null) {
             _emitEvent(BiometricEventType.fallbackFailed, userId, fallback);
             continue;
           }
-          final result =
-              await _tryCustomFallback(context, _config.customPinBuilder!);
+          final result = await _tryCustomFallback(
+            fallback,
+            reason,
+          );
           if (result == _FallbackResult.success) {
             _emitEvent(
                 BiometricEventType.fallbackSucceeded, userId, fallback);
-            return FallbackOutcome.success(
+            return FallbackSuccessOutcome(
               method: fallback,
               authMethod: fallback == BiometricFallback.customPin
                   ? BiometricAuthMethod.customPin
@@ -73,17 +77,17 @@ class FallbackChainExecutor {
             );
           }
           if (result == _FallbackResult.cancelled) {
-            return const FallbackOutcome.cancelled();
+            return const FallbackCancelledOutcome();
           }
           _emitEvent(BiometricEventType.fallbackFailed, userId, fallback);
           continue;
 
         case BiometricFallback.none:
-          return const FallbackOutcome.exhausted();
+          return const FallbackExhaustedOutcome();
       }
     }
 
-    return const FallbackOutcome.exhausted();
+    return const FallbackExhaustedOutcome();
   }
 
   Future<_FallbackResult> _tryDeviceCredential(String reason) async {
@@ -104,38 +108,20 @@ class FallbackChainExecutor {
   }
 
   Future<_FallbackResult> _tryCustomFallback(
-    BuildContext context,
-    CustomFallbackBuilder builder,
+    BiometricFallback fallback,
+    String reason,
   ) async {
-    final completer = Completer<_FallbackResult>();
-
-    final callbacks = CustomFallbackCallbacks(
-      onSuccess: () {
-        if (!completer.isCompleted) completer.complete(_FallbackResult.success);
-      },
-      onCancel: () {
-        if (!completer.isCompleted) {
-          completer.complete(_FallbackResult.cancelled);
-        }
-      },
-      onFailure: () {
-        if (!completer.isCompleted) completer.complete(_FallbackResult.failed);
-      },
-    );
-
-    // Show the custom fallback widget as an overlay
-    final overlay = OverlayEntry(
-      builder: (_) => builder(context, callbacks),
-    );
-
-    Overlay.of(context).insert(overlay);
-
     try {
-      final result = await completer.future;
-      overlay.remove();
-      return result;
+      final result = await _config.fallbackHandler!.handleFallback(
+        type: fallback,
+        reason: reason,
+      );
+      return switch (result) {
+        FallbackResult.success => _FallbackResult.success,
+        FallbackResult.cancelled => _FallbackResult.cancelled,
+        FallbackResult.failed => _FallbackResult.failed,
+      };
     } catch (_) {
-      overlay.remove();
       return _FallbackResult.failed;
     }
   }
@@ -171,16 +157,19 @@ sealed class FallbackOutcome {
   const factory FallbackOutcome.exhausted() = FallbackExhaustedOutcome;
 }
 
+/// A fallback succeeded.
 class FallbackSuccessOutcome extends FallbackOutcome {
   const FallbackSuccessOutcome({required this.method, required this.authMethod});
   final BiometricFallback method;
   final BiometricAuthMethod authMethod;
 }
 
+/// User cancelled during fallback.
 class FallbackCancelledOutcome extends FallbackOutcome {
   const FallbackCancelledOutcome();
 }
 
+/// All fallbacks were exhausted without success.
 class FallbackExhaustedOutcome extends FallbackOutcome {
   const FallbackExhaustedOutcome();
 }

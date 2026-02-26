@@ -1,14 +1,13 @@
 import '../analytics/biometric_event.dart';
 import '../fallback/fallback_type.dart';
-import '../fallback/custom_fallback.dart';
+import '../fallback/fallback_handler.dart';
 import '../storage/token_store_interface.dart';
-import '../ui/biometric_theme.dart';
-import '../ui/biometric_strings.dart';
 
 /// Configuration object for the BiometricShield SDK.
 ///
-/// Pass this to [BiometricShield.configure] at app startup. Every field
-/// is optional — the SDK works with zero configuration using sensible defaults.
+/// Pure Dart configuration without Flutter or UI dependencies.
+/// Pass this to [BiometricShield()] constructor. Every field is optional —
+/// the SDK works with zero configuration using sensible defaults.
 class BiometricConfig {
   const BiometricConfig({
     this.sessionDuration = const Duration(minutes: 15),
@@ -17,16 +16,8 @@ class BiometricConfig {
     this.lockoutDuration = const Duration(minutes: 5),
     this.persistLockout = true,
     this.fallbackChain = const [BiometricFallback.deviceCredential],
-    this.customPinBuilder,
+    this.fallbackHandler,
     this.tokenStore,
-    this.theme,
-    this.strings,
-    this.useCustomPromptUI = true,
-    this.onTokenExpired,
-    this.onLockoutStart,
-    this.onLockoutEnd,
-    this.onUserCancelled,
-    this.onBiometricInvalidated,
     this.onEvent,
     this.defaultUserId,
   });
@@ -62,51 +53,17 @@ class BiometricConfig {
   /// Evaluated in order. Default: [BiometricFallback.deviceCredential]
   final List<BiometricFallback> fallbackChain;
 
+  /// Handler for custom fallback UI (PIN/password).
   /// If [fallbackChain] includes [BiometricFallback.customPin] or
-  /// [BiometricFallback.customPassword], this widget builder is called
-  /// to show the custom authentication UI.
-  /// Receives [CustomFallbackCallbacks] with onSuccess, onCancel, onFailure.
-  final CustomFallbackBuilder? customPinBuilder;
+  /// [BiometricFallback.customPassword], this handler must be provided.
+  /// Typically implemented by the UI layer (e.g., MaterialFallbackHandler).
+  final FallbackHandler? fallbackHandler;
 
   // --- Storage ---
 
   /// Custom token store implementation.
-  /// If null, uses the default [flutter_secure_storage] implementation.
+  /// If null, uses the default [BiometricTokenStore] implementation.
   final TokenStoreInterface? tokenStore;
-
-  // --- UI ---
-
-  /// Visual theme for all SDK-owned UI surfaces.
-  final BiometricTheme? theme;
-
-  /// Custom string overrides for all user-facing text.
-  final BiometricStrings? strings;
-
-  /// If true, SDK shows its own prompt UI (bottom sheet / overlay).
-  /// If false, relies entirely on platform biometric UI.
-  /// Default: true for fallback flows, false for biometric itself
-  final bool useCustomPromptUI;
-
-  // --- Lifecycle Callbacks ---
-
-  /// Called when biometric succeeds but the stored token has expired.
-  /// Use this to redirect to full login or trigger a token refresh.
-  /// If null, SDK surfaces a [BiometricResult.tokenExpired] to the caller.
-  final Future<void> Function()? onTokenExpired;
-
-  /// Called when the user exceeds [maxAttempts] and lockout begins.
-  /// Receives the [DateTime] when lockout will end.
-  final void Function(DateTime lockedUntil)? onLockoutStart;
-
-  /// Called when lockout period ends and auth is available again.
-  final void Function()? onLockoutEnd;
-
-  /// Called when the user explicitly cancels authentication.
-  final void Function()? onUserCancelled;
-
-  /// Called when biometric keys are invalidated (e.g. new fingerprint
-  /// added on Android). Use this to prompt user to re-enroll biometric.
-  final void Function()? onBiometricInvalidated;
 
   // --- Analytics ---
 
