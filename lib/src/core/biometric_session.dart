@@ -46,7 +46,22 @@ class BiometricSession {
   bool get isExpired => DateTime.now().isAfter(expiresAt);
 
   /// How much time remains before this session expires.
-  Duration get remainingValidity => expiresAt.difference(DateTime.now());
+  /// Returns [Duration.zero] if already expired.
+  Duration get remainingValidity {
+    final remaining = expiresAt.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BiometricSession &&
+          sessionId == other.sessionId &&
+          userId == other.userId &&
+          methodUsed == other.methodUsed;
+
+  @override
+  int get hashCode => Object.hash(sessionId, userId, methodUsed);
 
   @override
   String toString() =>

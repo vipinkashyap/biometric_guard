@@ -72,11 +72,12 @@ class BiometricGate extends StatelessWidget {
         return switch (state) {
           AuthIdle() || AuthAuthenticating() =>
             loadingWidget ?? const Center(child: CircularProgressIndicator()),
-          AuthAuthenticated(:final session, :final token) => _invokeCallback(
-            BiometricResult.success(session: session, token: token),
-          )
-              ? child
-              : child,
+          AuthAuthenticated(:final session, :final token) => () {
+            _invokeCallback(
+              BiometricResult.success(session: session, token: token),
+            );
+            return child;
+          }(),
           AuthFailed(:final result) =>
             fallbackWidget?.call(result) ??
                 const Center(child: Text('Authentication required')),

@@ -107,8 +107,8 @@ class MaterialFallbackHandler extends FallbackHandler {
         ),
       );
       return authenticated ? FallbackResult.success : FallbackResult.cancelled;
-    } catch (e) {
-      // Platform error or user cancelled
+    } on Exception catch (_) {
+      // Platform error or user cancelled. Programming errors still propagate.
       return FallbackResult.cancelled;
     }
   }
@@ -130,47 +130,53 @@ class MaterialFallbackHandler extends FallbackHandler {
       return FallbackResult.failed;
     }
 
-    // Show custom fallback UI in a bottom sheet
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      shape: RoundedRectangleBorder(
-        borderRadius: theme?.sheetBorderRadius ?? BorderRadius.zero,
-      ),
-      builder: (sheetContext) {
-        return DraggableScrollableSheet(
-          expand: false,
-          maxChildSize: theme?.sheetMaxHeight ?? 0.75,
-          builder: (scrollContext, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              child: Padding(
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
-                ),
-                child: customBuilder!(
-                  scrollContext,
-                  CustomFallbackCallbacks(
-                    onSuccess: () {
-                      result = FallbackResult.success;
-                      Navigator.pop(sheetContext);
-                    },
-                    onCancel: () {
-                      result = FallbackResult.cancelled;
-                      Navigator.pop(sheetContext);
-                    },
-                    onFailure: () {
-                      result = FallbackResult.failed;
-                      Navigator.pop(sheetContext);
-                    },
+    // Show custom fallback UI in a bottom sheet.
+    // Wrapped in try-catch to handle context unmount or navigation failure.
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        shape: RoundedRectangleBorder(
+          borderRadius: theme?.sheetBorderRadius ?? BorderRadius.zero,
+        ),
+        builder: (sheetContext) {
+          return DraggableScrollableSheet(
+            expand: false,
+            maxChildSize: theme?.sheetMaxHeight ?? 0.75,
+            builder: (scrollContext, scrollController) {
+              return SingleChildScrollView(
+                controller: scrollController,
+                child: Padding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.of(sheetContext).viewInsets.bottom,
+                  ),
+                  child: customBuilder!(
+                    scrollContext,
+                    CustomFallbackCallbacks(
+                      onSuccess: () {
+                        result = FallbackResult.success;
+                        Navigator.pop(sheetContext);
+                      },
+                      onCancel: () {
+                        result = FallbackResult.cancelled;
+                        Navigator.pop(sheetContext);
+                      },
+                      onFailure: () {
+                        result = FallbackResult.failed;
+                        Navigator.pop(sheetContext);
+                      },
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
-        );
-      },
-    );
+              );
+            },
+          );
+        },
+      );
+    } on Exception catch (_) {
+      // Context unmounted or navigation failed during bottom sheet display.
+      return FallbackResult.failed;
+    }
 
     return result;
   }

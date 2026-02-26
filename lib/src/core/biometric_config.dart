@@ -34,7 +34,15 @@ class BiometricConfig {
     this.defaultUserId,
     this.authenticationTimeout = const Duration(seconds: 60),
     this.verbose = false,
-  }) : assert(maxAttempts > 0, 'maxAttempts must be > 0');
+  }) : assert(maxAttempts > 0, 'maxAttempts must be > 0'),
+       assert(
+         fallbackHandler != null ||
+             !fallbackChain.any((f) =>
+                 f == BiometricFallback.customPin ||
+                 f == BiometricFallback.customPassword),
+         'fallbackHandler must be provided when fallbackChain '
+         'contains customPin or customPassword',
+       );
 
   // --- Session ---
 

@@ -45,6 +45,24 @@ class BiometricCapability {
   bool get canAuthenticate => (hasBiometric && isEnrolled) || supportsDeviceCredential;
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BiometricCapability &&
+          hasFaceID == other.hasFaceID &&
+          hasTouchID == other.hasTouchID &&
+          hasStrongBiometric == other.hasStrongBiometric &&
+          hasWeakBiometric == other.hasWeakBiometric &&
+          isEnrolled == other.isEnrolled &&
+          supportsDeviceCredential == other.supportsDeviceCredential &&
+          biometricLabel == other.biometricLabel;
+
+  @override
+  int get hashCode => Object.hash(
+        hasFaceID, hasTouchID, hasStrongBiometric, hasWeakBiometric,
+        isEnrolled, supportsDeviceCredential, biometricLabel,
+      );
+
+  @override
   String toString() =>
       'BiometricCapability(label: $biometricLabel, enrolled: $isEnrolled, '
       'faceID: $hasFaceID, touchID: $hasTouchID, '

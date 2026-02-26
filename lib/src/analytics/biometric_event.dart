@@ -31,6 +31,17 @@ class BiometricEvent {
   final Map<String, dynamic> properties;
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BiometricEvent &&
+          type == other.type &&
+          userId == other.userId &&
+          timestamp == other.timestamp;
+
+  @override
+  int get hashCode => Object.hash(type, userId, timestamp);
+
+  @override
   String toString() =>
       'BiometricEvent(type: $type, userId: $userId, timestamp: $timestamp)';
 }

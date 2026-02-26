@@ -23,6 +23,7 @@ class SessionManager {
         _store = store ?? config.tokenStore ?? BiometricTokenStore();
   static const _sessionKeyPrefix = 'session';
   static const _defaultUserId = '_device_default_';
+  static const _maxStreamControllers = 50;
 
   final BiometricConfig _config;
   final TokenStoreInterface _store;
@@ -184,6 +185,16 @@ class SessionManager {
 
     // Create controller if it doesn't exist
     if (!_sessionStreamControllers.containsKey(resolvedUserId)) {
+      // Evict stale controllers to prevent unbounded memory growth.
+      // Keep at most 50 controllers; evict oldest when exceeded.
+      if (_sessionStreamControllers.length >= _maxStreamControllers) {
+        final oldestKey = _sessionStreamControllers.keys.first;
+        final oldController = _sessionStreamControllers.remove(oldestKey);
+        if (oldController != null && !oldController.isClosed) {
+          oldController.close();
+        }
+      }
+
       final controller = StreamController<BiometricSession?>.broadcast();
       _sessionStreamControllers[resolvedUserId] = controller;
 
@@ -249,9 +260,14 @@ class SessionManager {
         methodUsed: _parseAuthMethod(map['methodUsed']),
         isActive: map['isActive'] as bool? ?? true,
       );
-    } catch (e) {
-      // Corrupted session data — emit event and clear it
-      _emitEvent(BiometricEventType.sessionCleared, userId, null);
+    } on Exception catch (e) {
+      // Corrupted session data — emit event with details and clear it.
+      _config.onEvent?.call(BiometricEvent(
+        type: BiometricEventType.sessionCleared,
+        userId: userId,
+        timestamp: DateTime.now(),
+        properties: {'reason': 'corrupted_data', 'error': e.toString()},
+      ));
       await _store.delete(_sessionKey(userId));
       return null;
     }

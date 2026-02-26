@@ -127,20 +127,22 @@ class _BiometricBuilderState extends State<BiometricBuilder>
 
     // Subscribe to session stream to react to session changes.
     _sessionSubscription =
-        widget.shield.sessionStream(userId: widget.userId).listen((session) {
-      if (mounted) {
-        if (session != null && !session.isExpired) {
-          // Session is active — switch to authenticated state if not already there.
-          if (_authState is! AuthAuthenticated) {
-            setState(() {
-              _authState = AuthAuthenticated(session: session, token: null);
-            });
-          }
-        } else {
-          // Session expired or cleared — reset to idle.
-          if (_authState is AuthAuthenticated) {
-            setState(() => _authState = const AuthIdle());
-          }
+        widget.shield.sessionStream(userId: widget.userId).listen((session) async {
+      if (!mounted) return;
+
+      if (session != null && !session.isExpired) {
+        // Session is active — fetch token and switch to authenticated state.
+        if (_authState is! AuthAuthenticated) {
+          final token = await widget.shield.getToken(userId: widget.userId);
+          if (!mounted) return;
+          setState(() {
+            _authState = AuthAuthenticated(session: session, token: token);
+          });
+        }
+      } else {
+        // Session expired or cleared — reset to idle.
+        if (_authState is AuthAuthenticated) {
+          setState(() => _authState = const AuthIdle());
         }
       }
     });

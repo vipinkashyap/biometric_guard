@@ -77,8 +77,8 @@ class BiometricShield implements BiometricShieldInterface {
       } else if (Platform.isAndroid) {
         _androidHandler = AndroidHandler();
       }
-    } catch (_) {
-      // Platform.isIOS/isAndroid can throw on web; ignore.
+    } on UnsupportedError catch (_) {
+      // Platform.isIOS/isAndroid throws UnsupportedError on web; ignore.
     }
   }
 
@@ -129,6 +129,9 @@ class BiometricShield implements BiometricShieldInterface {
     String? userId,
     bool requireFresh = false,
   }) async {
+    assert(reason.isNotEmpty, 'reason must not be empty');
+    assert(reason.length <= 200, 'reason should be <= 200 characters for platform prompts');
+
     // Concurrency guard — if an auth is already running, wait for it.
     if (_authInProgress != null) {
       _log('authenticate() already in progress — awaiting existing call');
@@ -250,7 +253,6 @@ class BiometricShield implements BiometricShieldInterface {
       _PlatformAuthResult.lockedOut => const BiometricResult.unavailable(
           reason: BiometricUnavailableReason.temporarilyUnavailable,
         ),
-      _PlatformAuthResult.invalidated => _handleInvalidated(userId),
       _PlatformAuthResult.error => const BiometricResult.error(
           message: 'Platform authentication error',
           cause: null,
@@ -439,8 +441,9 @@ class BiometricShield implements BiometricShieldInterface {
     if (config.policyProvider == null) return null;
     try {
       return await config.policyProvider!.getPolicy(userId: userId);
-    } catch (e) {
-      // Policy fetch failed — emit event and fall back to local config
+    } on Exception catch (e) {
+      // Policy fetch failed (network, timeout, etc) — fall back to local config.
+      // Only catches Exception; programming errors (Error) still propagate.
       _emitEvent(BiometricEventType.policyFetchFailed, userId, properties: {
         'error': e.toString(),
       });
@@ -540,7 +543,8 @@ class BiometricShield implements BiometricShieldInterface {
             reason: 'Refresh token expired. Please sign in again.',
           );
       }
-    } catch (e) {
+    } on Exception catch (e) {
+      // Only catches Exception; programming errors (Error) still propagate.
       _emitEvent(BiometricEventType.authFailed, userId, properties: {
         'error': 'token_refresh_error',
         'message': e.toString(),
@@ -574,7 +578,8 @@ class BiometricShield implements BiometricShieldInterface {
       }
       // Neither handler available (desktop, web, unsupported platform)
       return _PlatformAuthResult.notAvailable;
-    } catch (e) {
+    } on Exception catch (e) {
+      // Platform communication errors. Programming errors still propagate.
       _emitEvent(BiometricEventType.authFailed, null, properties: {
         'error': 'platform_auth_error',
         'message': e.toString(),
@@ -689,11 +694,6 @@ class BiometricShield implements BiometricShieldInterface {
     return BiometricResult.unavailable(reason: unavailableReason);
   }
 
-  BiometricResult _handleInvalidated(String? userId) {
-    _emitEvent(BiometricEventType.biometricInvalidated, userId);
-    return const BiometricResult.invalidated();
-  }
-
   _PlatformAuthResult _mapIOSOutcome(IOSAuthOutcome outcome) {
     return switch (outcome) {
       IOSAuthOutcome.success => _PlatformAuthResult.success,
@@ -755,7 +755,6 @@ enum _PlatformAuthResult {
   notEnrolled,
   passcodeNotSet,
   lockedOut,
-  invalidated,
   error,
 }
 

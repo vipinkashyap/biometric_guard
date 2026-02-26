@@ -23,11 +23,26 @@ class LockoutState {
   final int maxAttempts;
 
   /// How much time remains in the lockout period, or null if not locked out.
-  Duration? get remainingLockout =>
-      lockedUntil?.difference(DateTime.now());
+  /// Returns [Duration.zero] if lockout has expired.
+  Duration? get remainingLockout {
+    if (lockedUntil == null) return null;
+    final remaining = lockedUntil!.difference(DateTime.now());
+    return remaining.isNegative ? Duration.zero : remaining;
+  }
 
   /// How many attempts remain before lockout.
   int get remainingAttempts => maxAttempts - currentAttemptCount;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LockoutState &&
+          isLockedOut == other.isLockedOut &&
+          currentAttemptCount == other.currentAttemptCount &&
+          maxAttempts == other.maxAttempts;
+
+  @override
+  int get hashCode => Object.hash(isLockedOut, currentAttemptCount, maxAttempts);
 
   @override
   String toString() =>

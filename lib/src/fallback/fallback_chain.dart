@@ -102,7 +102,8 @@ class FallbackChainExecutor {
       return didAuthenticate
           ? _FallbackResult.success
           : _FallbackResult.failed;
-    } catch (_) {
+    } on Exception catch (_) {
+      // Platform communication error. Programming errors still propagate.
       return _FallbackResult.failed;
     }
   }
@@ -121,7 +122,8 @@ class FallbackChainExecutor {
         FallbackResult.cancelled => _FallbackResult.cancelled,
         FallbackResult.failed => _FallbackResult.failed,
       };
-    } catch (_) {
+    } on Exception catch (_) {
+      // Handler error. Programming errors still propagate.
       return _FallbackResult.failed;
     }
   }
