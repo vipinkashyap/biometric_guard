@@ -62,7 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
       error: (msg, _) => 'Error: $msg',
     );
 
-    if (mounted) {
+    if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Clear session and navigate back to login.
   Future<void> _logout() async {
     await shield.clearSession(userId: 'demo-user');
-    if (mounted) {
+    if (context.mounted) {
       unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
   }
@@ -162,8 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   reauthenticationRequired: (r) => r ?? 'Re-auth required',
                   error: (m, _) => 'Error: $m',
                 );
-                // ignore: use_build_context_synchronously
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text(status)),
                   );

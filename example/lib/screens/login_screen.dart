@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _statusMessage = 'Token stored. You can now use biometrics.');
 
     // Navigate to home
-    if (mounted) {
+    if (context.mounted) {
       unawaited(Navigator.of(context).pushReplacementNamed('/home'));
     }
   }
