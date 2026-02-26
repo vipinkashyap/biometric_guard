@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:biometric_shield/biometric_shield.dart';
-import '../main.dart';
 
 /// Demonstrates a custom FallbackHandler implementation.
 ///

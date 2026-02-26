@@ -213,15 +213,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     reauthenticationRequired: (r) => r ?? 'Re-auth required',
                     error: (m, _) => 'Error: $m',
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(status)),
-                  );
+                  if(context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(status)),
+                    );
+                  }
+               
                   unawaited(_loadSessionInfo());
                 } on Exception catch (e) {
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e')),
-                  );
+
+                  if(context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Error: $e')),
+                    );
+                  }
+              
                 }
               },
               icon: const Icon(Icons.refresh),
