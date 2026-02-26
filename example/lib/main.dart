@@ -4,6 +4,9 @@ import 'package:biometric_shield/biometric_shield.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/biometric_builder_screen.dart';
+import 'screens/custom_fallback_screen.dart';
+import 'screens/multi_user_screen.dart';
 
 // Create a single BiometricShield instance for the app.
 // In a real app, this would be provided via a DI framework (Provider, Riverpod, GetIt).
@@ -54,6 +57,9 @@ class BiometricShieldExampleApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/builder-demo': (context) => const BiometricBuilderScreen(),
+        '/custom-fallback': (context) => const CustomFallbackScreen(),
+        '/multi-user': (context) => const MultiUserScreen(),
       },
     );
   }

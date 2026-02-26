@@ -117,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -155,6 +155,40 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: _openSensitiveData,
               icon: const Icon(Icons.lock),
               label: const Text('View Health Records (BiometricGate)'),
+            ),
+            const SizedBox(height: 12),
+
+            const Divider(height: 32),
+            Text(
+              'More Demos',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 12),
+
+            // BiometricBuilder demo
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pushNamed('/builder-demo'),
+              icon: const Icon(Icons.widgets),
+              label: const Text('BiometricBuilder (Reactive Widget)'),
+            ),
+            const SizedBox(height: 8),
+
+            // Custom fallback handler demo
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pushNamed('/custom-fallback'),
+              icon: const Icon(Icons.pin),
+              label: const Text('Custom Fallback Handler (PIN)'),
+            ),
+            const SizedBox(height: 8),
+
+            // Multi-user demo
+            OutlinedButton.icon(
+              onPressed: () =>
+                  Navigator.of(context).pushNamed('/multi-user'),
+              icon: const Icon(Icons.people),
+              label: const Text('Multi-User Demo'),
             ),
             const SizedBox(height: 12),
 
