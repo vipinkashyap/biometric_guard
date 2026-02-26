@@ -91,6 +91,11 @@ class _HomeScreenState extends State<HomeScreen> {
         title: const Text('Home'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Security Settings',
+            onPressed: () => Navigator.of(context).pushNamed('/settings'),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Logout',
             onPressed: _logout,

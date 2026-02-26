@@ -3,9 +3,19 @@ import 'package:biometric_shield/biometric_shield.dart';
 
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/settings_screen.dart';
 
 // Create a single BiometricShield instance for the app.
 // In a real app, this would be provided via a DI framework (Provider, Riverpod, GetIt).
+//
+// Integration points:
+// - tokenLifecycle: Plug in your backend (Firebase, REST JWT, Supabase, Amplify)
+// - policyProvider: Let your server enforce biometric rules
+// - fallbackHandler: Custom PIN/password UI
+// - tokenStore: Custom secure storage
+// - onEvent: Analytics / HIPAA audit trail
+//
+// All are optional — the SDK works with zero config.
 final shield = BiometricShield(
   BiometricConfig(
     sessionDuration: const Duration(minutes: 15),
@@ -13,6 +23,8 @@ final shield = BiometricShield(
     maxAttempts: 3,
     lockoutDuration: const Duration(minutes: 5),
     fallbackChain: const [BiometricFallback.deviceCredential],
+    // tokenLifecycle: MyFirebaseTokenLifecycle(),   // <-- your backend adapter
+    // policyProvider: MyApiPolicyProvider(apiClient), // <-- server policy
     onEvent: (event) {
       // Pipe all audit events to your analytics service.
       debugPrint('[BiometricShield] Event: ${event.type.name} '
@@ -41,6 +53,7 @@ class BiometricShieldExampleApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/home': (context) => const HomeScreen(),
+        '/settings': (context) => const SettingsScreen(),
       },
     );
   }
