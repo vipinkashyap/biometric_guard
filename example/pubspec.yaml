@@ -1,6 +1,7 @@
 name: biometric_shield_example
 description: Example app demonstrating BiometricShield SDK integration patterns.
 
+version: 1.0.0+1
 publish_to: 'none'
 
 environment:
