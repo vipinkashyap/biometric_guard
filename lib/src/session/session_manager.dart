@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -32,7 +33,8 @@ class SessionManager {
   final Map<String, BiometricSession> _activeSessions = {};
 
   /// Stream controllers for session state changes, keyed by userId.
-  final Map<String, StreamController<BiometricSession?>> _sessionStreamControllers = {};
+  /// LinkedHashMap preserves insertion order for deterministic LRU eviction.
+  final LinkedHashMap<String, StreamController<BiometricSession?>> _sessionStreamControllers = LinkedHashMap();
 
   /// Create a new session after successful authentication.
   Future<BiometricSession> createSession({
@@ -40,7 +42,7 @@ class SessionManager {
     String? userId,
   }) async {
     final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
-    final now = DateTime.now();
+    final now = DateTime.now().toUtc();
     final session = BiometricSession(
       sessionId: _generateSessionId(),
       userId: resolvedUserId,
@@ -121,7 +123,7 @@ class SessionManager {
       sessionId: session.sessionId,
       userId: session.userId,
       authenticatedAt: session.authenticatedAt,
-      expiresAt: DateTime.now().add(_config.sessionDuration),
+      expiresAt: DateTime.now().toUtc().add(_config.sessionDuration),
       methodUsed: session.methodUsed,
       isActive: true,
     );
@@ -185,12 +187,15 @@ class SessionManager {
 
     // Create controller if it doesn't exist
     if (!_sessionStreamControllers.containsKey(resolvedUserId)) {
-      // Evict stale controllers to prevent unbounded memory growth.
-      // Keep at most 50 controllers; evict oldest when exceeded.
-      if (_sessionStreamControllers.length >= _maxStreamControllers) {
+      // Evict oldest controllers (LRU) to prevent unbounded memory growth.
+      // LinkedHashMap preserves insertion order so .keys.first is oldest.
+      while (_sessionStreamControllers.length >= _maxStreamControllers) {
         final oldestKey = _sessionStreamControllers.keys.first;
         final oldController = _sessionStreamControllers.remove(oldestKey);
         if (oldController != null && !oldController.isClosed) {
+          // Emit null so subscribers get a clean "session ended" event
+          // before the stream closes, rather than an abrupt error.
+          oldController.add(null);
           oldController.close();
         }
       }
@@ -229,9 +234,12 @@ class SessionManager {
     }
   }
 
+  /// Generate a unique session ID using timestamp + counter for uniqueness.
+  static int _sessionCounter = 0;
   String _generateSessionId() {
-    final timestamp = DateTime.now().microsecondsSinceEpoch.toString();
-    final hash = sha256.convert(utf8.encode(timestamp)).toString();
+    _sessionCounter++;
+    final input = '${DateTime.now().toUtc().microsecondsSinceEpoch}:$_sessionCounter';
+    final hash = sha256.convert(utf8.encode(input)).toString();
     return hash.substring(0, 16);
   }
 
@@ -251,12 +259,24 @@ class SessionManager {
     if (raw == null) return null;
 
     try {
-      final map = jsonDecode(raw) as Map<String, dynamic>;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('Session data is not a JSON object');
+      }
+      final map = decoded;
+      final sessionId = map['sessionId'];
+      final sessionUserId = map['userId'];
+      final authAt = map['authenticatedAt'];
+      final expAt = map['expiresAt'];
+      if (sessionId is! String || sessionUserId is! String ||
+          authAt is! String || expAt is! String) {
+        throw const FormatException('Session data has missing or invalid fields');
+      }
       return BiometricSession(
-        sessionId: map['sessionId'] as String,
-        userId: map['userId'] as String,
-        authenticatedAt: DateTime.parse(map['authenticatedAt'] as String),
-        expiresAt: DateTime.parse(map['expiresAt'] as String),
+        sessionId: sessionId,
+        userId: sessionUserId,
+        authenticatedAt: DateTime.parse(authAt),
+        expiresAt: DateTime.parse(expAt),
         methodUsed: _parseAuthMethod(map['methodUsed']),
         isActive: map['isActive'] as bool? ?? true,
       );
@@ -265,7 +285,7 @@ class SessionManager {
       _config.onEvent?.call(BiometricEvent(
         type: BiometricEventType.sessionCleared,
         userId: userId,
-        timestamp: DateTime.now(),
+        timestamp: DateTime.now().toUtc(),
         properties: {'reason': 'corrupted_data', 'error': e.toString()},
       ));
       await _store.delete(_sessionKey(userId));
@@ -277,10 +297,15 @@ class SessionManager {
   /// Supports both `.name` (new) and `.index` (legacy) formats.
   BiometricAuthMethod _parseAuthMethod(dynamic value) {
     if (value is String) {
-      return BiometricAuthMethod.values.byName(value);
+      // Graceful lookup — return default on unrecognized name
+      // instead of throwing ArgumentError from byName().
+      for (final method in BiometricAuthMethod.values) {
+        if (method.name == value) return method;
+      }
+      return BiometricAuthMethod.fingerprint;
     }
-    if (value is int) {
-      // Legacy format — index-based
+    if (value is int && value >= 0 && value < BiometricAuthMethod.values.length) {
+      // Legacy format — index-based with bounds check.
       return BiometricAuthMethod.values[value];
     }
     return BiometricAuthMethod.fingerprint;
@@ -303,7 +328,7 @@ class SessionManager {
     _config.onEvent?.call(BiometricEvent(
       type: type,
       userId: userId,
-      timestamp: DateTime.now(),
+      timestamp: DateTime.now().toUtc(),
       method: method,
     ));
   }

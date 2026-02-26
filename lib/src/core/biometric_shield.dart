@@ -59,6 +59,7 @@ import '../analytics/event_type.dart';
 class BiometricShield implements BiometricShieldInterface {
   /// Create a new BiometricShield instance with optional config.
   BiometricShield({this.config = const BiometricConfig()}) {
+    config.validate(); // Runtime validation even in release builds
     _sessionManager = SessionManager(config: config);
     _lockoutManager = LockoutManager(config: config);
     _capabilityDetector = CapabilityDetector();
@@ -132,13 +133,16 @@ class BiometricShield implements BiometricShieldInterface {
     assert(reason.isNotEmpty, 'reason must not be empty');
     assert(reason.length <= 200, 'reason should be <= 200 characters for platform prompts');
 
-    // Concurrency guard — if an auth is already running, wait for it.
-    if (_authInProgress != null) {
+    // Concurrency guard — atomic check-and-set prevents race between
+    // two calls arriving before either sets the completer.
+    final existing = _authInProgress;
+    if (existing != null) {
       _log('authenticate() already in progress — awaiting existing call');
-      return _authInProgress!.future;
+      return existing.future;
     }
 
-    _authInProgress = Completer<BiometricResult>();
+    final completer = Completer<BiometricResult>();
+    _authInProgress = completer;
     try {
       final result = await Future.any<BiometricResult>([
         _authenticateImpl(
@@ -148,14 +152,14 @@ class BiometricShield implements BiometricShieldInterface {
         ),
         _timeoutFuture(userId),
       ]);
-      _authInProgress!.complete(result);
+      completer.complete(result);
       return result;
-    } catch (e) {
+    } on Exception catch (e) {
       final errorResult = BiometricResult.error(
         message: 'Unexpected error during authentication: $e',
         cause: e,
       );
-      _authInProgress!.complete(errorResult);
+      if (!completer.isCompleted) completer.complete(errorResult);
       return errorResult;
     } finally {
       _authInProgress = null;
@@ -466,8 +470,12 @@ class BiometricShield implements BiometricShieldInterface {
   }) async {
     final token = await _sessionManager.getToken(userId: userId);
 
+    // Capture locally to avoid TOCTOU null dereference if config were
+    // ever swapped between the null check and the dereference.
+    final lifecycle = config.tokenLifecycle;
+
     // No lifecycle handler — return whatever we have.
-    if (config.tokenLifecycle == null) {
+    if (lifecycle == null) {
       if (token == null) {
         _emitEvent(BiometricEventType.tokenExpired, userId);
         return const BiometricResult.tokenExpired();
@@ -481,7 +489,7 @@ class BiometricShield implements BiometricShieldInterface {
       return const BiometricResult.tokenExpired();
     }
 
-    final status = await config.tokenLifecycle!.validate(token);
+    final status = await lifecycle.validate(token);
 
     return switch (status) {
       TokenStatus.valid => BiometricResult.sessionValid(
@@ -512,9 +520,14 @@ class BiometricShield implements BiometricShieldInterface {
       'action': 'attempting_refresh',
     });
 
+    final lifecycle = config.tokenLifecycle;
+    if (lifecycle == null) {
+      return const BiometricResult.tokenExpired();
+    }
+
     try {
       final refreshResult =
-          await config.tokenLifecycle!.refresh(expiredToken);
+          await lifecycle.refresh(expiredToken);
 
       switch (refreshResult) {
         case TokenRefreshSuccess(:final newToken, :final metadata):
@@ -594,7 +607,7 @@ class BiometricShield implements BiometricShieldInterface {
       if (_iosHandler != null) return _iosHandler!.detectMethod();
       if (_androidHandler != null) return _androidHandler!.detectMethod();
       return BiometricAuthMethod.fingerprint;
-    } catch (_) {
+    } on Exception catch (_) {
       return BiometricAuthMethod.fingerprint;
     }
   }
@@ -732,8 +745,8 @@ class BiometricShield implements BiometricShieldInterface {
     config.onEvent?.call(BiometricEvent(
       type: type,
       userId: userId ?? config.defaultUserId ?? '_device_default_',
-      timestamp: DateTime.now(),
-      properties: properties,
+      timestamp: DateTime.now().toUtc(),
+      properties: Map<String, dynamic>.unmodifiable(properties),
     ));
   }
 

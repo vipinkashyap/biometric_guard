@@ -37,7 +37,7 @@ class LockoutManager {
 
     // If currently locked out and lockout has expired, reset first
     if (data.isLockedOut && data.lockedUntil != null) {
-      if (DateTime.now().isAfter(data.lockedUntil!)) {
+      if (DateTime.now().toUtc().isAfter(data.lockedUntil!)) {
         await _resetData(resolvedUserId);
         return _recordNewFailure(resolvedUserId);
       }
@@ -58,7 +58,7 @@ class LockoutManager {
 
     // Check if lockout has expired
     if (data.isLockedOut && data.lockedUntil != null) {
-      if (DateTime.now().isAfter(data.lockedUntil!)) {
+      if (DateTime.now().toUtc().isAfter(data.lockedUntil!)) {
         await _resetData(resolvedUserId);
         _emitEvent(BiometricEventType.lockoutEnded, resolvedUserId);
         return LockoutState(
@@ -98,7 +98,7 @@ class LockoutManager {
 
     if (newCount >= _config.maxAttempts) {
       // Trigger lockout
-      final lockedUntil = DateTime.now().add(_config.lockoutDuration);
+      final lockedUntil = DateTime.now().toUtc().add(_config.lockoutDuration);
       data = _LockoutData(
         attemptCount: newCount,
         isLockedOut: true,
@@ -170,7 +170,8 @@ class LockoutManager {
             ? DateTime.parse(map['lockedUntil'] as String)
             : null,
       );
-    } catch (_) {
+    } on Exception catch (_) {
+      // Corrupted lockout data — clear and return null.
       await _store.delete('$_lockoutKeyPrefix:$userId');
       return null;
     }
@@ -187,7 +188,7 @@ class LockoutManager {
     _config.onEvent?.call(BiometricEvent(
       type: type,
       userId: userId,
-      timestamp: DateTime.now(),
+      timestamp: DateTime.now().toUtc(),
     ));
   }
 }

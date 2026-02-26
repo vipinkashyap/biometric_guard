@@ -26,7 +26,7 @@ class LockoutState {
   /// Returns [Duration.zero] if lockout has expired.
   Duration? get remainingLockout {
     if (lockedUntil == null) return null;
-    final remaining = lockedUntil!.difference(DateTime.now());
+    final remaining = lockedUntil!.difference(DateTime.now().toUtc());
     return remaining.isNegative ? Duration.zero : remaining;
   }
 

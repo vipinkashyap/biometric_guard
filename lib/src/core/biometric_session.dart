@@ -42,13 +42,13 @@ class BiometricSession {
   /// Whether this session is currently considered active.
   final bool isActive;
 
-  /// Whether this session has expired based on the current time.
-  bool get isExpired => DateTime.now().isAfter(expiresAt);
+  /// Whether this session has expired based on the current time (UTC).
+  bool get isExpired => DateTime.now().toUtc().isAfter(expiresAt);
 
   /// How much time remains before this session expires.
   /// Returns [Duration.zero] if already expired.
   Duration get remainingValidity {
-    final remaining = expiresAt.difference(DateTime.now());
+    final remaining = expiresAt.difference(DateTime.now().toUtc());
     return remaining.isNegative ? Duration.zero : remaining;
   }
 

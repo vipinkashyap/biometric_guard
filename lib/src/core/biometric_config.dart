@@ -44,6 +44,23 @@ class BiometricConfig {
          'contains customPin or customPassword',
        );
 
+  /// Validate this config at runtime. Call this from BiometricShield
+  /// constructor to catch misconfiguration even in release builds.
+  void validate() {
+    if (maxAttempts <= 0) {
+      throw ArgumentError.value(maxAttempts, 'maxAttempts', 'must be > 0');
+    }
+    if (fallbackHandler == null &&
+        fallbackChain.any((f) =>
+            f == BiometricFallback.customPin ||
+            f == BiometricFallback.customPassword)) {
+      throw ArgumentError(
+        'fallbackHandler must be provided when fallbackChain '
+        'contains customPin or customPassword',
+      );
+    }
+  }
+
   // --- Session ---
 
   /// How long a successful auth remains valid before re-auth is required.

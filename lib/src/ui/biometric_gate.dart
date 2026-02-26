@@ -33,8 +33,8 @@ class BiometricGate extends StatelessWidget {
     this.userId,
   });
 
-  /// The BiometricShield instance to use.
-  final BiometricShield shield;
+  /// The BiometricShield instance to use. Accepts the interface for DI/testing.
+  final BiometricShieldInterface shield;
 
   /// The content to show after successful authentication.
   final Widget child;

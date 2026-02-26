@@ -136,7 +136,7 @@ class FallbackChainExecutor {
     _config.onEvent?.call(BiometricEvent(
       type: type,
       userId: userId ?? _config.defaultUserId ?? '_device_default_',
-      timestamp: DateTime.now(),
+      timestamp: DateTime.now().toUtc(),
       properties: {'fallbackMethod': fallback.name},
     ));
   }

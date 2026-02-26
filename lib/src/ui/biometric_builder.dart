@@ -87,7 +87,8 @@ class BiometricBuilder extends StatefulWidget {
   });
 
   /// The BiometricShield instance to use for authentication.
-  final BiometricShield shield;
+  /// Accepts the interface for DI/testing.
+  final BiometricShieldInterface shield;
 
   /// Reason shown in the biometric prompt.
   final String reason;
