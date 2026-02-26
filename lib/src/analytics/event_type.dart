@@ -6,6 +6,7 @@ enum BiometricEventType {
   authAttempted,
   authSucceeded,
   authFailed,
+  authCancelled,
   fallbackTriggered,
   fallbackSucceeded,
   fallbackFailed,
