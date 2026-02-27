@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -245,7 +244,7 @@ void main() {
               AuthAuthenticating() => const Text('authenticating'),
               AuthAuthenticated() => const Text('authenticated'),
               AuthFailed(:final result) =>
-                Text('failed:${result is BiometricError ? (result as BiometricError).message : "other"}'),
+                Text('failed:${result is BiometricError ? (result).message : "other"}'),
             },
           ),
         ),
