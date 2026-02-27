@@ -58,10 +58,8 @@ void main() {
         await lockoutManager.recordFailure(userId: 'user-1');
         await lockoutManager.recordFailure(userId: 'user-1');
 
-        final state1 =
-            await lockoutManager.getLockoutState(userId: 'user-1');
-        final state2 =
-            await lockoutManager.getLockoutState(userId: 'user-2');
+        final state1 = await lockoutManager.getLockoutState(userId: 'user-1');
+        final state2 = await lockoutManager.getLockoutState(userId: 'user-2');
 
         expect(state1.currentAttemptCount, 2);
         expect(state2.currentAttemptCount, 0);
@@ -106,10 +104,8 @@ void main() {
 
         await lockoutManager.resetLockout(userId: 'user-1');
 
-        final state1 =
-            await lockoutManager.getLockoutState(userId: 'user-1');
-        final state2 =
-            await lockoutManager.getLockoutState(userId: 'user-2');
+        final state1 = await lockoutManager.getLockoutState(userId: 'user-1');
+        final state2 = await lockoutManager.getLockoutState(userId: 'user-2');
 
         expect(state1.currentAttemptCount, 0);
         expect(state2.currentAttemptCount, 1);
@@ -156,6 +152,45 @@ void main() {
         expect(state.isLockedOut, isTrue);
         expect(state.currentAttemptCount, 5);
         customManager.dispose();
+      });
+
+      test('uses stricter maxAttempts override when provided', () async {
+        final state = await lockoutManager.recordFailureWithOverrides(
+          userId: 'user-1',
+          maxAttemptsOverride: 1,
+        );
+        expect(state.isLockedOut, isTrue);
+        expect(state.maxAttempts, 1);
+      });
+
+      test(
+        'enforces lower maxAttempts override from existing attempts',
+        () async {
+          await lockoutManager.recordFailure(userId: 'user-1');
+          await lockoutManager.recordFailure(userId: 'user-1');
+
+          final state = await lockoutManager.getLockoutStateWithOverrides(
+            userId: 'user-1',
+            maxAttemptsOverride: 2,
+          );
+          expect(state.isLockedOut, isTrue);
+          expect(state.maxAttempts, 2);
+        },
+      );
+    });
+
+    group('lockout duration overrides', () {
+      test('uses longer lockout duration override', () async {
+        final state = await lockoutManager.recordFailureWithOverrides(
+          userId: 'user-1',
+          maxAttemptsOverride: 1,
+          lockoutDurationOverride: const Duration(minutes: 15),
+        );
+        final remaining = state.remainingLockout;
+
+        expect(state.isLockedOut, isTrue);
+        expect(remaining, isNotNull);
+        expect(remaining!, greaterThan(const Duration(minutes: 14)));
       });
     });
 

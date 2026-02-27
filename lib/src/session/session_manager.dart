@@ -16,12 +16,9 @@ import '../storage/biometric_token_store.dart';
 /// Handles session creation, validation, expiry, and activity-based
 /// extension. All session data is namespace-scoped by userId.
 class SessionManager {
-
-  SessionManager({
-    required BiometricConfig config,
-    TokenStoreInterface? store,
-  })  : _config = config,
-        _store = store ?? config.tokenStore ?? BiometricTokenStore();
+  SessionManager({required BiometricConfig config, TokenStoreInterface? store})
+    : _config = config,
+      _store = store ?? config.tokenStore ?? BiometricTokenStore();
   static const _sessionKeyPrefix = 'session';
   static const _defaultUserId = '_device_default_';
   static const _maxStreamControllers = 50;
@@ -34,7 +31,8 @@ class SessionManager {
 
   /// Stream controllers for session state changes, keyed by userId.
   /// LinkedHashMap preserves insertion order for deterministic LRU eviction.
-  final LinkedHashMap<String, StreamController<BiometricSession?>> _sessionStreamControllers = LinkedHashMap();
+  final LinkedHashMap<String, StreamController<BiometricSession?>>
+  _sessionStreamControllers = LinkedHashMap();
 
   /// Create a new session after successful authentication.
   Future<BiometricSession> createSession({
@@ -56,10 +54,7 @@ class SessionManager {
     _activeSessions[resolvedUserId] = session;
 
     // Persist session metadata
-    await _store.store(
-      _sessionKey(resolvedUserId),
-      _encodeSession(session),
-    );
+    await _store.store(_sessionKey(resolvedUserId), _encodeSession(session));
 
     // Emit stream event
     _emitSessionStreamEvent(resolvedUserId, session);
@@ -129,10 +124,7 @@ class SessionManager {
     );
 
     _activeSessions[resolvedUserId] = extended;
-    await _store.store(
-      _sessionKey(resolvedUserId),
-      _encodeSession(extended),
-    );
+    await _store.store(_sessionKey(resolvedUserId), _encodeSession(extended));
 
     // Notify stream listeners of the extended session
     _emitSessionStreamEvent(resolvedUserId, extended);
@@ -155,7 +147,7 @@ class SessionManager {
     // Clear session, token, and lockout data
     await _store.delete(_sessionKey(resolvedUserId));
     await _store.delete('$resolvedUserId:token');
-    await _store.delete('$resolvedUserId:lockout');
+    await _store.delete('lockout:$resolvedUserId');
     _emitSessionStreamEvent(resolvedUserId, null);
   }
 
@@ -176,6 +168,12 @@ class SessionManager {
       _emitEvent(BiometricEventType.tokenRetrieved, resolvedUserId, null);
     }
     return token;
+  }
+
+  /// Delete the stored token for a user.
+  Future<void> deleteToken({String? userId}) async {
+    final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
+    await _store.delete('$resolvedUserId:token');
   }
 
   /// Get a stream of session state changes for a user.
@@ -238,7 +236,8 @@ class SessionManager {
   static int _sessionCounter = 0;
   String _generateSessionId() {
     _sessionCounter++;
-    final input = '${DateTime.now().toUtc().microsecondsSinceEpoch}:$_sessionCounter';
+    final input =
+        '${DateTime.now().toUtc().microsecondsSinceEpoch}:$_sessionCounter';
     final hash = sha256.convert(utf8.encode(input)).toString();
     return hash.substring(0, 16);
   }
@@ -268,9 +267,13 @@ class SessionManager {
       final sessionUserId = map['userId'];
       final authAt = map['authenticatedAt'];
       final expAt = map['expiresAt'];
-      if (sessionId is! String || sessionUserId is! String ||
-          authAt is! String || expAt is! String) {
-        throw const FormatException('Session data has missing or invalid fields');
+      if (sessionId is! String ||
+          sessionUserId is! String ||
+          authAt is! String ||
+          expAt is! String) {
+        throw const FormatException(
+          'Session data has missing or invalid fields',
+        );
       }
       return BiometricSession(
         sessionId: sessionId,
@@ -282,12 +285,14 @@ class SessionManager {
       );
     } on Exception catch (e) {
       // Corrupted session data — emit event with details and clear it.
-      _config.onEvent?.call(BiometricEvent(
-        type: BiometricEventType.sessionCleared,
-        userId: userId,
-        timestamp: DateTime.now().toUtc(),
-        properties: {'reason': 'corrupted_data', 'error': e.toString()},
-      ));
+      _config.onEvent?.call(
+        BiometricEvent(
+          type: BiometricEventType.sessionCleared,
+          userId: userId,
+          timestamp: DateTime.now().toUtc(),
+          properties: {'reason': 'corrupted_data', 'error': e.toString()},
+        ),
+      );
       await _store.delete(_sessionKey(userId));
       return null;
     }
@@ -304,7 +309,9 @@ class SessionManager {
       }
       return BiometricAuthMethod.fingerprint;
     }
-    if (value is int && value >= 0 && value < BiometricAuthMethod.values.length) {
+    if (value is int &&
+        value >= 0 &&
+        value < BiometricAuthMethod.values.length) {
       // Legacy format — index-based with bounds check.
       return BiometricAuthMethod.values[value];
     }
@@ -325,11 +332,13 @@ class SessionManager {
     String userId,
     BiometricAuthMethod? method,
   ) {
-    _config.onEvent?.call(BiometricEvent(
-      type: type,
-      userId: userId,
-      timestamp: DateTime.now().toUtc(),
-      method: method,
-    ));
+    _config.onEvent?.call(
+      BiometricEvent(
+        type: type,
+        userId: userId,
+        timestamp: DateTime.now().toUtc(),
+        method: method,
+      ),
+    );
   }
 }

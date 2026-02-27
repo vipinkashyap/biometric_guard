@@ -95,21 +95,14 @@ void main() {
           userId: 'user-1',
         );
 
-        expect(
-          await sessionManager.hasValidSession(userId: 'user-1'),
-          isTrue,
-        );
-        expect(
-          await sessionManager.hasValidSession(userId: 'user-2'),
-          isFalse,
-        );
+        expect(await sessionManager.hasValidSession(userId: 'user-1'), isTrue);
+        expect(await sessionManager.hasValidSession(userId: 'user-2'), isFalse);
       });
     });
 
     group('getActiveSession', () {
       test('returns null when no session exists', () async {
-        final session =
-            await sessionManager.getActiveSession(userId: 'user-1');
+        final session = await sessionManager.getActiveSession(userId: 'user-1');
         expect(session, isNull);
       });
 
@@ -119,8 +112,7 @@ void main() {
           userId: 'user-1',
         );
 
-        final session =
-            await sessionManager.getActiveSession(userId: 'user-1');
+        final session = await sessionManager.getActiveSession(userId: 'user-1');
         expect(session, isNotNull);
         expect(session!.userId, 'user-1');
       });
@@ -151,14 +143,8 @@ void main() {
 
         await sessionManager.clearSession(userId: 'user-1');
 
-        expect(
-          await sessionManager.hasValidSession(userId: 'user-1'),
-          isFalse,
-        );
-        expect(
-          await sessionManager.hasValidSession(userId: 'user-2'),
-          isTrue,
-        );
+        expect(await sessionManager.hasValidSession(userId: 'user-1'), isFalse);
+        expect(await sessionManager.hasValidSession(userId: 'user-2'), isTrue);
       });
     });
 
@@ -193,12 +179,20 @@ void main() {
 
         await sessionManager.clearAll(userId: 'user-1');
 
-        expect(
-          await sessionManager.hasValidSession(userId: 'user-1'),
-          isFalse,
-        );
+        expect(await sessionManager.hasValidSession(userId: 'user-1'), isFalse);
         expect(await sessionManager.getToken(userId: 'user-1'), isNull);
       });
+
+      test(
+        'clears persisted lockout data with lockout:userId key format',
+        () async {
+          await store.store('lockout:user-1', '{"attemptCount":2}');
+
+          await sessionManager.clearAll(userId: 'user-1');
+
+          expect(await store.containsKey('lockout:user-1'), isFalse);
+        },
+      );
     });
 
     group('sessionStream', () {

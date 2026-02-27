@@ -131,7 +131,10 @@ class BiometricShield implements BiometricShieldInterface {
     bool requireFresh = false,
   }) async {
     assert(reason.isNotEmpty, 'reason must not be empty');
-    assert(reason.length <= 200, 'reason should be <= 200 characters for platform prompts');
+    assert(
+      reason.length <= 200,
+      'reason should be <= 200 characters for platform prompts',
+    );
 
     // Concurrency guard — atomic check-and-set prevents race between
     // two calls arriving before either sets the completer.
@@ -143,39 +146,50 @@ class BiometricShield implements BiometricShieldInterface {
 
     final completer = Completer<BiometricResult>();
     _authInProgress = completer;
-    try {
-      final result = await Future.any<BiometricResult>([
-        _authenticateImpl(
-          reason: reason,
-          userId: userId,
-          requireFresh: requireFresh,
-        ),
-        _timeoutFuture(userId),
-      ]);
-      completer.complete(result);
-      return result;
-    } on Exception catch (e) {
-      final errorResult = BiometricResult.error(
-        message: 'Unexpected error during authentication: $e',
-        cause: e,
-      );
-      if (!completer.isCompleted) completer.complete(errorResult);
-      return errorResult;
-    } finally {
-      _authInProgress = null;
-    }
-  }
+    final context = _AuthRunContext();
+    final timeoutTimer = Timer(config.authenticationTimeout, () {
+      if (!completer.isCompleted) {
+        completer.complete(_timeoutResult(userId, context));
+      }
+    });
 
-  /// Returns a future that completes with a timeout error after
-  /// [BiometricConfig.authenticationTimeout].
-  Future<BiometricResult> _timeoutFuture(String? userId) async {
-    await Future<void>.delayed(config.authenticationTimeout);
-    _emitEvent(BiometricEventType.authTimeout, userId);
-    _log('authenticate() timed out after ${config.authenticationTimeout}');
-    return const BiometricResult.error(
-      message: 'Authentication timed out',
-      cause: null,
+    unawaited(
+      completer.future.whenComplete(() {
+        if (identical(_authInProgress, completer)) {
+          _authInProgress = null;
+        }
+      }),
     );
+
+    unawaited(
+      _authenticateImpl(
+        reason: reason,
+        userId: userId,
+        requireFresh: requireFresh,
+        context: context,
+      ).then(
+        (result) {
+          if (!completer.isCompleted) {
+            completer.complete(result);
+          }
+        },
+        onError: (Object error, StackTrace _) {
+          final errorResult = BiometricResult.error(
+            message: 'Unexpected error during authentication: $error',
+            cause: error,
+          );
+          if (!completer.isCompleted) {
+            completer.complete(errorResult);
+          }
+        },
+      ),
+    );
+
+    try {
+      return await completer.future;
+    } finally {
+      timeoutTimer.cancel();
+    }
   }
 
   /// Core authentication implementation, called inside the timeout wrapper.
@@ -183,9 +197,22 @@ class BiometricShield implements BiometricShieldInterface {
     required String reason,
     String? userId,
     bool requireFresh = false,
+    required _AuthRunContext context,
   }) async {
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
     // 1. Check server policy
     final policy = await _resolvePolicy(userId: userId);
+    final effectiveMaxAttempts = _effectiveMaxAttempts(policy);
+    final effectiveLockoutDuration = _effectiveLockoutDuration(policy);
+    final effectiveSessionDuration = _effectiveSessionDuration(policy);
+    final shouldForceFresh =
+        requireFresh || (policy?.forceReauthOnResume == true);
+
+    final cancelledAfterPolicy = _resultIfCancelled(context, userId);
+    if (cancelledAfterPolicy != null) return cancelledAfterPolicy;
+
     if (policy?.disabled == true) {
       return BiometricResult.unavailable(
         reason: BiometricUnavailableReason.disabledByPolicy,
@@ -197,32 +224,52 @@ class BiometricShield implements BiometricShieldInterface {
     final biometricEnabled = await _preferences.isBiometricEnabled(
       userId: userId,
     );
+    final cancelledAfterPrefs = _resultIfCancelled(context, userId);
+    if (cancelledAfterPrefs != null) return cancelledAfterPrefs;
+
     if (!biometricEnabled && (policy?.requireBiometric != true)) {
       return _handleUnavailable(
         reason: reason,
         userId: userId,
         unavailableReason: BiometricUnavailableReason.notSupported,
+        context: context,
       );
     }
 
     // 3. Check lockout state
-    final lockoutState = await _lockoutManager.getLockoutState(userId: userId);
+    final lockoutState = await _lockoutManager.getLockoutStateWithOverrides(
+      userId: userId,
+      maxAttemptsOverride: effectiveMaxAttempts,
+      lockoutDurationOverride: effectiveLockoutDuration,
+    );
+    final cancelledAfterLockout = _resultIfCancelled(context, userId);
+    if (cancelledAfterLockout != null) return cancelledAfterLockout;
+
     if (lockoutState.isLockedOut) {
-      _emitEvent(BiometricEventType.authFailed, userId, properties: {
-        'reason': 'locked_out',
-      });
-      return BiometricResult.lockedOut(
-        lockedUntil: lockoutState.lockedUntil!,
+      _emitEvent(
+        BiometricEventType.authFailed,
+        userId,
+        properties: {'reason': 'locked_out'},
       );
+      return BiometricResult.lockedOut(lockedUntil: lockoutState.lockedUntil!);
     }
 
     // 4. Check existing session (unless requireFresh)
-    if (!requireFresh) {
-      final activeSession =
-          await _sessionManager.getActiveSession(userId: userId);
-      if (activeSession != null && !activeSession.isExpired) {
+    if (!shouldForceFresh) {
+      final activeSession = await _sessionManager.getActiveSession(
+        userId: userId,
+      );
+      final cancelledAfterSession = _resultIfCancelled(context, userId);
+      if (cancelledAfterSession != null) return cancelledAfterSession;
+
+      if (activeSession != null &&
+          _isSessionValidForDuration(activeSession, effectiveSessionDuration)) {
         _log('Session still valid — resolving token');
-        return _validateAndResolveToken(session: activeSession, userId: userId);
+        return _validateAndResolveToken(
+          session: activeSession,
+          userId: userId,
+          context: context,
+        );
       }
     }
 
@@ -231,36 +278,42 @@ class BiometricShield implements BiometricShieldInterface {
 
     // 6. Attempt biometric authentication
     final biometricResult = await _attemptBiometric(reason: reason);
+    final cancelledAfterPlatform = _resultIfCancelled(context, userId);
+    if (cancelledAfterPlatform != null) return cancelledAfterPlatform;
 
     return switch (biometricResult) {
       _PlatformAuthResult.success => await _handleSuccess(
-          userId: userId,
-          method: await _detectMethod(),
-        ),
+        userId: userId,
+        method: await _detectMethod(),
+        context: context,
+      ),
       _PlatformAuthResult.failed => await _handleFailure(
-          reason: reason,
-          userId: userId,
-        ),
+        reason: reason,
+        userId: userId,
+        context: context,
+        maxAttemptsOverride: effectiveMaxAttempts,
+        lockoutDurationOverride: effectiveLockoutDuration,
+      ),
       _PlatformAuthResult.cancelled => _handleCancelled(userId),
       _PlatformAuthResult.notAvailable ||
-      _PlatformAuthResult.notEnrolled =>
-        await _handleUnavailable(
-          reason: reason,
-          userId: userId,
-          unavailableReason: biometricResult == _PlatformAuthResult.notEnrolled
-              ? BiometricUnavailableReason.notEnrolled
-              : BiometricUnavailableReason.notSupported,
-        ),
+      _PlatformAuthResult.notEnrolled => await _handleUnavailable(
+        reason: reason,
+        userId: userId,
+        unavailableReason: biometricResult == _PlatformAuthResult.notEnrolled
+            ? BiometricUnavailableReason.notEnrolled
+            : BiometricUnavailableReason.notSupported,
+        context: context,
+      ),
       _PlatformAuthResult.passcodeNotSet => const BiometricResult.unavailable(
-          reason: BiometricUnavailableReason.passcodeNotSet,
-        ),
+        reason: BiometricUnavailableReason.passcodeNotSet,
+      ),
       _PlatformAuthResult.lockedOut => const BiometricResult.unavailable(
-          reason: BiometricUnavailableReason.temporarilyUnavailable,
-        ),
+        reason: BiometricUnavailableReason.temporarilyUnavailable,
+      ),
       _PlatformAuthResult.error => const BiometricResult.error(
-          message: 'Platform authentication error',
-          cause: null,
-        ),
+        message: 'Platform authentication error',
+        cause: null,
+      ),
     };
   }
 
@@ -277,16 +330,28 @@ class BiometricShield implements BiometricShieldInterface {
     required String reason,
     String? userId,
   }) async {
-    final activeSession =
-        await _sessionManager.getActiveSession(userId: userId);
-    if (activeSession != null && !activeSession.isExpired) {
+    final policy = await _resolvePolicy(userId: userId);
+    if (policy?.disabled == true) {
+      return BiometricResult.unavailable(
+        reason: BiometricUnavailableReason.disabledByPolicy,
+        message: policy?.disabledReason,
+      );
+    }
+
+    if (policy?.forceReauthOnResume == true) {
+      return authenticate(reason: reason, userId: userId, requireFresh: true);
+    }
+
+    final effectiveSessionDuration = _effectiveSessionDuration(policy);
+    final activeSession = await _sessionManager.getActiveSession(
+      userId: userId,
+    );
+    if (activeSession != null &&
+        _isSessionValidForDuration(activeSession, effectiveSessionDuration)) {
       return _validateAndResolveToken(session: activeSession, userId: userId);
     }
 
-    return authenticate(
-      reason: reason,
-      userId: userId,
-    );
+    return authenticate(reason: reason, userId: userId);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -313,17 +378,21 @@ class BiometricShield implements BiometricShieldInterface {
     _log('enroll() called');
     final capability = await _capabilityDetector.detect();
     if (capability.isEnrolled) {
-      _emitEvent(BiometricEventType.enrolled, userId, properties: {
-        'alreadyEnrolled': true,
-      });
+      _emitEvent(
+        BiometricEventType.enrolled,
+        userId,
+        properties: {'alreadyEnrolled': true},
+      );
       return true;
     }
 
     // Can't programmatically enroll — we can only check.
     // Emit declined event and return false so the caller can show instructions.
-    _emitEvent(BiometricEventType.enrollmentDeclined, userId, properties: {
-      'reason': 'not_enrolled_on_device',
-    });
+    _emitEvent(
+      BiometricEventType.enrollmentDeclined,
+      userId,
+      properties: {'reason': 'not_enrolled_on_device'},
+    );
     return false;
   }
 
@@ -342,7 +411,7 @@ class BiometricShield implements BiometricShieldInterface {
     // If remember me is disabled, also clear the stored token
     final rememberMe = await _preferences.isRememberMeEnabled(userId: userId);
     if (!rememberMe) {
-      await _sessionManager.storeToken('', userId: userId);
+      await _sessionManager.deleteToken(userId: userId);
     }
   }
 
@@ -372,11 +441,15 @@ class BiometricShield implements BiometricShieldInterface {
   @override
   Future<BiometricCapability> getCapability() async {
     final capability = await _capabilityDetector.detect();
-    _emitEvent(BiometricEventType.capabilityChecked, null, properties: {
-      'hasBiometric': capability.hasBiometric,
-      'isEnrolled': capability.isEnrolled,
-      'label': capability.biometricLabel,
-    });
+    _emitEvent(
+      BiometricEventType.capabilityChecked,
+      null,
+      properties: {
+        'hasBiometric': capability.hasBiometric,
+        'isEnrolled': capability.isEnrolled,
+        'label': capability.biometricLabel,
+      },
+    );
     return capability;
   }
 
@@ -448,9 +521,11 @@ class BiometricShield implements BiometricShieldInterface {
     } on Exception catch (e) {
       // Policy fetch failed (network, timeout, etc) — fall back to local config.
       // Only catches Exception; programming errors (Error) still propagate.
-      _emitEvent(BiometricEventType.policyFetchFailed, userId, properties: {
-        'error': e.toString(),
-      });
+      _emitEvent(
+        BiometricEventType.policyFetchFailed,
+        userId,
+        properties: {'error': e.toString()},
+      );
       _log('Policy fetch failed: $e — using local config');
       return null;
     }
@@ -467,8 +542,14 @@ class BiometricShield implements BiometricShieldInterface {
   Future<BiometricResult> _validateAndResolveToken({
     required BiometricSession session,
     String? userId,
+    _AuthRunContext? context,
   }) async {
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
     final token = await _sessionManager.getToken(userId: userId);
+    final cancelledAfterLoad = _resultIfCancelled(context, userId);
+    if (cancelledAfterLoad != null) return cancelledAfterLoad;
 
     // Capture locally to avoid TOCTOU null dereference if config were
     // ever swapped between the null check and the dereference.
@@ -476,7 +557,7 @@ class BiometricShield implements BiometricShieldInterface {
 
     // No lifecycle handler — return whatever we have.
     if (lifecycle == null) {
-      if (token == null) {
+      if (token == null || token.isEmpty) {
         _emitEvent(BiometricEventType.tokenExpired, userId);
         return const BiometricResult.tokenExpired();
       }
@@ -484,7 +565,7 @@ class BiometricShield implements BiometricShieldInterface {
     }
 
     // Lifecycle handler configured — validate.
-    if (token == null) {
+    if (token == null || token.isEmpty) {
       _emitEvent(BiometricEventType.tokenExpired, userId);
       return const BiometricResult.tokenExpired();
     }
@@ -493,20 +574,23 @@ class BiometricShield implements BiometricShieldInterface {
 
     return switch (status) {
       TokenStatus.valid => BiometricResult.sessionValid(
-          session: session,
-          token: token,
-        ),
+        session: session,
+        token: token,
+      ),
       TokenStatus.expired => _attemptTokenRefresh(
-          expiredToken: token,
-          session: session,
-          userId: userId,
-        ),
+        expiredToken: token,
+        session: session,
+        userId: userId,
+        context: context,
+      ),
       TokenStatus.invalid || TokenStatus.missing => () {
-          _emitEvent(BiometricEventType.tokenExpired, userId, properties: {
-            'tokenStatus': status.name,
-          });
-          return const BiometricResult.tokenExpired();
-        }(),
+        _emitEvent(
+          BiometricEventType.tokenExpired,
+          userId,
+          properties: {'tokenStatus': status.name},
+        );
+        return const BiometricResult.tokenExpired();
+      }(),
     };
   }
 
@@ -515,10 +599,16 @@ class BiometricShield implements BiometricShieldInterface {
     required String expiredToken,
     required BiometricSession session,
     String? userId,
+    _AuthRunContext? context,
   }) async {
-    _emitEvent(BiometricEventType.tokenExpired, userId, properties: {
-      'action': 'attempting_refresh',
-    });
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
+    _emitEvent(
+      BiometricEventType.tokenExpired,
+      userId,
+      properties: {'action': 'attempting_refresh'},
+    );
 
     final lifecycle = config.tokenLifecycle;
     if (lifecycle == null) {
@@ -526,16 +616,19 @@ class BiometricShield implements BiometricShieldInterface {
     }
 
     try {
-      final refreshResult =
-          await lifecycle.refresh(expiredToken);
+      final refreshResult = await lifecycle.refresh(expiredToken);
 
       switch (refreshResult) {
         case TokenRefreshSuccess(:final newToken, :final metadata):
+          final cancelledAfterRefresh = _resultIfCancelled(context, userId);
+          if (cancelledAfterRefresh != null) return cancelledAfterRefresh;
+
           await _sessionManager.storeToken(newToken, userId: userId);
-          _emitEvent(BiometricEventType.tokenStored, userId, properties: {
-            'source': 'token_refresh',
-            ...metadata,
-          });
+          _emitEvent(
+            BiometricEventType.tokenStored,
+            userId,
+            properties: {'source': 'token_refresh', ...metadata},
+          );
           return BiometricResult.sessionValid(
             session: session,
             token: newToken,
@@ -548,20 +641,26 @@ class BiometricShield implements BiometricShieldInterface {
           );
 
         case TokenRefreshReauthRequired():
+          final cancelledBeforeClear = _resultIfCancelled(context, userId);
+          if (cancelledBeforeClear != null) return cancelledBeforeClear;
+
           await _sessionManager.clearSession(userId: userId);
-          _emitEvent(BiometricEventType.sessionCleared, userId, properties: {
-            'reason': 'reauth_required',
-          });
+          _emitEvent(
+            BiometricEventType.sessionCleared,
+            userId,
+            properties: {'reason': 'reauth_required'},
+          );
           return const BiometricResult.reauthenticationRequired(
             reason: 'Refresh token expired. Please sign in again.',
           );
       }
     } on Exception catch (e) {
       // Only catches Exception; programming errors (Error) still propagate.
-      _emitEvent(BiometricEventType.authFailed, userId, properties: {
-        'error': 'token_refresh_error',
-        'message': e.toString(),
-      });
+      _emitEvent(
+        BiometricEventType.authFailed,
+        userId,
+        properties: {'error': 'token_refresh_error', 'message': e.toString()},
+      );
       return BiometricResult.error(
         message: 'Token refresh error: $e',
         cause: e,
@@ -593,10 +692,11 @@ class BiometricShield implements BiometricShieldInterface {
       return _PlatformAuthResult.notAvailable;
     } on Exception catch (e) {
       // Platform communication errors. Programming errors still propagate.
-      _emitEvent(BiometricEventType.authFailed, null, properties: {
-        'error': 'platform_auth_error',
-        'message': e.toString(),
-      });
+      _emitEvent(
+        BiometricEventType.authFailed,
+        null,
+        properties: {'error': 'platform_auth_error', 'message': e.toString()},
+      );
       _log('Platform auth error: $e');
       return _PlatformAuthResult.error;
     }
@@ -615,25 +715,41 @@ class BiometricShield implements BiometricShieldInterface {
   Future<BiometricResult> _handleSuccess({
     String? userId,
     required BiometricAuthMethod method,
+    required _AuthRunContext context,
   }) async {
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
     // Reset lockout counter on success
     await _lockoutManager.onSuccess(userId: userId);
+    final cancelledAfterReset = _resultIfCancelled(context, userId);
+    if (cancelledAfterReset != null) return cancelledAfterReset;
 
     // Create session
     final session = await _sessionManager.createSession(
       method: method,
       userId: userId,
     );
+    final cancelledAfterSession = _resultIfCancelled(context, userId);
+    if (cancelledAfterSession != null) {
+      await _sessionManager.clearSession(userId: userId);
+      return cancelledAfterSession;
+    }
 
     // Validate & resolve token through the single code path
-    final tokenResult =
-        await _validateAndResolveToken(session: session, userId: userId);
+    final tokenResult = await _validateAndResolveToken(
+      session: session,
+      userId: userId,
+      context: context,
+    );
 
     // Wrap sessionValid into success for fresh auth responses
     if (tokenResult is BiometricSessionValid) {
-      _emitEvent(BiometricEventType.authSucceeded, userId, properties: {
-        'method': method.name,
-      });
+      _emitEvent(
+        BiometricEventType.authSucceeded,
+        userId,
+        properties: {'method': method.name},
+      );
       return BiometricResult.success(
         session: session,
         token: tokenResult.token,
@@ -647,16 +763,26 @@ class BiometricShield implements BiometricShieldInterface {
   Future<BiometricResult> _handleFailure({
     required String reason,
     String? userId,
+    required _AuthRunContext context,
+    required int maxAttemptsOverride,
+    required Duration lockoutDurationOverride,
   }) async {
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
     _emitEvent(BiometricEventType.authFailed, userId);
 
     // Record failure and check lockout
-    final lockoutState =
-        await _lockoutManager.recordFailure(userId: userId);
+    final lockoutState = await _lockoutManager.recordFailureWithOverrides(
+      userId: userId,
+      maxAttemptsOverride: maxAttemptsOverride,
+      lockoutDurationOverride: lockoutDurationOverride,
+    );
+    final cancelledAfterLockout = _resultIfCancelled(context, userId);
+    if (cancelledAfterLockout != null) return cancelledAfterLockout;
+
     if (lockoutState.isLockedOut) {
-      return BiometricResult.lockedOut(
-        lockedUntil: lockoutState.lockedUntil!,
-      );
+      return BiometricResult.lockedOut(lockedUntil: lockoutState.lockedUntil!);
     }
 
     // Try fallback chain
@@ -664,16 +790,19 @@ class BiometricShield implements BiometricShieldInterface {
       reason: reason,
       userId: userId,
     );
+    final cancelledAfterFallback = _resultIfCancelled(context, userId);
+    if (cancelledAfterFallback != null) return cancelledAfterFallback;
 
     return switch (fallbackResult) {
       FallbackSuccessOutcome(:final authMethod) => await _handleSuccess(
-          userId: userId,
-          method: authMethod,
-        ),
+        userId: userId,
+        method: authMethod,
+        context: context,
+      ),
       FallbackCancelledOutcome() => _handleCancelled(userId),
       FallbackExhaustedOutcome() => const BiometricResult.unavailable(
-          reason: BiometricUnavailableReason.notSupported,
-        ),
+        reason: BiometricUnavailableReason.notSupported,
+      ),
     };
   }
 
@@ -686,21 +815,29 @@ class BiometricShield implements BiometricShieldInterface {
     required String reason,
     String? userId,
     required BiometricUnavailableReason unavailableReason,
+    required _AuthRunContext context,
   }) async {
+    final cancelled = _resultIfCancelled(context, userId);
+    if (cancelled != null) return cancelled;
+
     if (config.fallbackChain.isNotEmpty) {
       final fallbackResult = await _fallbackChain.execute(
         reason: reason,
         userId: userId,
       );
+      final cancelledAfterFallback = _resultIfCancelled(context, userId);
+      if (cancelledAfterFallback != null) return cancelledAfterFallback;
 
       return switch (fallbackResult) {
         FallbackSuccessOutcome(:final authMethod) => await _handleSuccess(
-            userId: userId,
-            method: authMethod,
-          ),
+          userId: userId,
+          method: authMethod,
+          context: context,
+        ),
         FallbackCancelledOutcome() => _handleCancelled(userId),
-        FallbackExhaustedOutcome() =>
-          BiometricResult.unavailable(reason: unavailableReason),
+        FallbackExhaustedOutcome() => BiometricResult.unavailable(
+          reason: unavailableReason,
+        ),
       };
     }
 
@@ -737,17 +874,79 @@ class BiometricShield implements BiometricShieldInterface {
   // Private — Utilities
   // ═══════════════════════════════════════════════════════════
 
+  BiometricResult _timeoutResult(String? userId, _AuthRunContext context) {
+    if (context.cancel()) {
+      _emitEvent(BiometricEventType.authTimeout, userId);
+      _log('authenticate() timed out after ${config.authenticationTimeout}');
+    }
+    return const BiometricResult.error(
+      message: 'Authentication timed out',
+      cause: null,
+    );
+  }
+
+  BiometricResult? _resultIfCancelled(
+    _AuthRunContext? context,
+    String? userId,
+  ) {
+    if (context == null || !context.isCancelled) return null;
+    return _timeoutResult(userId, context);
+  }
+
+  Duration _effectiveSessionDuration(BiometricPolicy? policy) {
+    final policyDuration = policy?.maxSessionDuration;
+    if (policyDuration == null) return config.sessionDuration;
+    return policyDuration < config.sessionDuration
+        ? policyDuration
+        : config.sessionDuration;
+  }
+
+  int _effectiveMaxAttempts(BiometricPolicy? policy) {
+    final policyAttempts = policy?.maxAttempts;
+    if (policyAttempts == null || policyAttempts <= 0) {
+      return config.maxAttempts;
+    }
+    return policyAttempts < config.maxAttempts
+        ? policyAttempts
+        : config.maxAttempts;
+  }
+
+  Duration _effectiveLockoutDuration(BiometricPolicy? policy) {
+    final policyDuration = policy?.lockoutDuration;
+    if (policyDuration == null) return config.lockoutDuration;
+    return policyDuration > config.lockoutDuration
+        ? policyDuration
+        : config.lockoutDuration;
+  }
+
+  bool _isSessionValidForDuration(
+    BiometricSession session,
+    Duration effectiveSessionDuration,
+  ) {
+    if (!session.isActive) return false;
+    final now = DateTime.now().toUtc();
+    final sessionExpiryByPolicy = session.authenticatedAt.toUtc().add(
+      effectiveSessionDuration,
+    );
+    final effectiveExpiry = sessionExpiryByPolicy.isBefore(session.expiresAt)
+        ? sessionExpiryByPolicy
+        : session.expiresAt;
+    return now.isBefore(effectiveExpiry);
+  }
+
   void _emitEvent(
     BiometricEventType type,
     String? userId, {
     Map<String, dynamic> properties = const {},
   }) {
-    config.onEvent?.call(BiometricEvent(
-      type: type,
-      userId: userId ?? config.defaultUserId ?? '_device_default_',
-      timestamp: DateTime.now().toUtc(),
-      properties: Map<String, dynamic>.unmodifiable(properties),
-    ));
+    config.onEvent?.call(
+      BiometricEvent(
+        type: type,
+        userId: userId ?? config.defaultUserId ?? '_device_default_',
+        timestamp: DateTime.now().toUtc(),
+        properties: Map<String, dynamic>.unmodifiable(properties),
+      ),
+    );
   }
 
   /// Log a message when [BiometricConfig.verbose] is enabled.
@@ -769,6 +968,18 @@ enum _PlatformAuthResult {
   passcodeNotSet,
   lockedOut,
   error,
+}
+
+class _AuthRunContext {
+  bool _cancelled = false;
+
+  bool get isCancelled => _cancelled;
+
+  bool cancel() {
+    if (_cancelled) return false;
+    _cancelled = true;
+    return true;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

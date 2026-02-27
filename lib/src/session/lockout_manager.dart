@@ -12,12 +12,9 @@ import 'lockout_state.dart';
 /// Lockout data is optionally persisted across app restarts
 /// (controlled by [BiometricConfig.persistLockout]).
 class LockoutManager {
-
-  LockoutManager({
-    required BiometricConfig config,
-    TokenStoreInterface? store,
-  })  : _config = config,
-        _store = store ?? config.tokenStore ?? BiometricTokenStore();
+  LockoutManager({required BiometricConfig config, TokenStoreInterface? store})
+    : _config = config,
+      _store = store ?? config.tokenStore ?? BiometricTokenStore();
   static const _lockoutKeyPrefix = 'lockout';
   static const _defaultUserId = '_device_default_';
 
@@ -32,28 +29,62 @@ class LockoutManager {
   /// Returns the updated [LockoutState]. If [maxAttempts] is exceeded,
   /// lockout begins and the [onLockoutStart] callback is invoked.
   Future<LockoutState> recordFailure({String? userId}) async {
+    return recordFailureWithOverrides(userId: userId);
+  }
+
+  /// Record a failed authentication attempt with optional effective-policy overrides.
+  Future<LockoutState> recordFailureWithOverrides({
+    String? userId,
+    int? maxAttemptsOverride,
+    Duration? lockoutDurationOverride,
+  }) async {
     final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
+    final effectiveMaxAttempts = _effectiveMaxAttempts(maxAttemptsOverride);
+    final effectiveLockoutDuration = _effectiveLockoutDuration(
+      lockoutDurationOverride,
+    );
     final data = await _getOrLoadData(resolvedUserId);
 
     // If currently locked out and lockout has expired, reset first
     if (data.isLockedOut && data.lockedUntil != null) {
       if (DateTime.now().toUtc().isAfter(data.lockedUntil!)) {
         await _resetData(resolvedUserId);
-        return _recordNewFailure(resolvedUserId);
+        return _recordNewFailure(
+          resolvedUserId,
+          maxAttempts: effectiveMaxAttempts,
+          lockoutDuration: effectiveLockoutDuration,
+        );
       }
     }
 
     // If already locked out and lockout hasn't expired
     if (data.isLockedOut) {
-      return _toState(data);
+      return _toState(data, effectiveMaxAttempts);
     }
 
-    return _recordNewFailure(resolvedUserId);
+    return _recordNewFailure(
+      resolvedUserId,
+      maxAttempts: effectiveMaxAttempts,
+      lockoutDuration: effectiveLockoutDuration,
+    );
   }
 
   /// Get the current lockout state for a user.
   Future<LockoutState> getLockoutState({String? userId}) async {
+    return getLockoutStateWithOverrides(userId: userId);
+  }
+
+  /// Get the current lockout state for a user with optional effective-policy overrides.
+  Future<LockoutState> getLockoutStateWithOverrides({
+    String? userId,
+    int? maxAttemptsOverride,
+    Duration? lockoutDurationOverride,
+  }) async {
     final resolvedUserId = userId ?? _config.defaultUserId ?? _defaultUserId;
+    final effectiveMaxAttempts = _effectiveMaxAttempts(maxAttemptsOverride);
+    final effectiveLockoutDuration = _effectiveLockoutDuration(
+      lockoutDurationOverride,
+    );
     final data = await _getOrLoadData(resolvedUserId);
 
     // Check if lockout has expired
@@ -64,12 +95,30 @@ class LockoutManager {
         return LockoutState(
           isLockedOut: false,
           currentAttemptCount: 0,
-          maxAttempts: _config.maxAttempts,
+          maxAttempts: effectiveMaxAttempts,
         );
       }
     }
 
-    return _toState(data);
+    // Policy tightened max attempts below current attempt count: lock immediately.
+    if (!data.isLockedOut &&
+        data.attemptCount >= effectiveMaxAttempts &&
+        effectiveMaxAttempts > 0) {
+      final lockedUntil = DateTime.now().toUtc().add(effectiveLockoutDuration);
+      final locked = _LockoutData(
+        attemptCount: data.attemptCount,
+        isLockedOut: true,
+        lockedUntil: lockedUntil,
+      );
+      _lockoutData[resolvedUserId] = locked;
+      if (_config.persistLockout) {
+        await _persistData(resolvedUserId, locked);
+      }
+      _emitEvent(BiometricEventType.lockoutStarted, resolvedUserId);
+      return _toState(locked, effectiveMaxAttempts);
+    }
+
+    return _toState(data, effectiveMaxAttempts);
   }
 
   /// Manually reset the lockout (e.g. after admin override).
@@ -92,13 +141,17 @@ class LockoutManager {
 
   // --- Private helpers ---
 
-  Future<LockoutState> _recordNewFailure(String resolvedUserId) async {
+  Future<LockoutState> _recordNewFailure(
+    String resolvedUserId, {
+    required int maxAttempts,
+    required Duration lockoutDuration,
+  }) async {
     var data = await _getOrLoadData(resolvedUserId);
     final newCount = data.attemptCount + 1;
 
-    if (newCount >= _config.maxAttempts) {
+    if (newCount >= maxAttempts) {
       // Trigger lockout
-      final lockedUntil = DateTime.now().toUtc().add(_config.lockoutDuration);
+      final lockedUntil = DateTime.now().toUtc().add(lockoutDuration);
       data = _LockoutData(
         attemptCount: newCount,
         isLockedOut: true,
@@ -107,10 +160,7 @@ class LockoutManager {
 
       _emitEvent(BiometricEventType.lockoutStarted, resolvedUserId);
     } else {
-      data = _LockoutData(
-        attemptCount: newCount,
-        isLockedOut: false,
-      );
+      data = _LockoutData(attemptCount: newCount, isLockedOut: false);
     }
 
     _lockoutData[resolvedUserId] = data;
@@ -118,7 +168,7 @@ class LockoutManager {
       await _persistData(resolvedUserId, data);
     }
 
-    return _toState(data);
+    return _toState(data, maxAttempts);
   }
 
   Future<_LockoutData> _getOrLoadData(String userId) async {
@@ -139,8 +189,7 @@ class LockoutManager {
   }
 
   Future<void> _resetData(String userId) async {
-    _lockoutData[userId] =
-        _LockoutData(attemptCount: 0, isLockedOut: false);
+    _lockoutData[userId] = _LockoutData(attemptCount: 0, isLockedOut: false);
     if (_config.persistLockout) {
       await _store.delete('$_lockoutKeyPrefix:$userId');
     }
@@ -177,25 +226,42 @@ class LockoutManager {
     }
   }
 
-  LockoutState _toState(_LockoutData data) => LockoutState(
-        isLockedOut: data.isLockedOut,
-        lockedUntil: data.lockedUntil,
-        currentAttemptCount: data.attemptCount,
-        maxAttempts: _config.maxAttempts,
-      );
+  LockoutState _toState(_LockoutData data, int maxAttempts) => LockoutState(
+    isLockedOut: data.isLockedOut,
+    lockedUntil: data.lockedUntil,
+    currentAttemptCount: data.attemptCount,
+    maxAttempts: maxAttempts,
+  );
+
+  int _effectiveMaxAttempts(int? maxAttemptsOverride) {
+    if (maxAttemptsOverride == null || maxAttemptsOverride <= 0) {
+      return _config.maxAttempts;
+    }
+    return maxAttemptsOverride < _config.maxAttempts
+        ? maxAttemptsOverride
+        : _config.maxAttempts;
+  }
+
+  Duration _effectiveLockoutDuration(Duration? lockoutDurationOverride) {
+    if (lockoutDurationOverride == null) return _config.lockoutDuration;
+    return lockoutDurationOverride > _config.lockoutDuration
+        ? lockoutDurationOverride
+        : _config.lockoutDuration;
+  }
 
   void _emitEvent(BiometricEventType type, String userId) {
-    _config.onEvent?.call(BiometricEvent(
-      type: type,
-      userId: userId,
-      timestamp: DateTime.now().toUtc(),
-    ));
+    _config.onEvent?.call(
+      BiometricEvent(
+        type: type,
+        userId: userId,
+        timestamp: DateTime.now().toUtc(),
+      ),
+    );
   }
 }
 
 /// Internal lockout data representation.
 class _LockoutData {
-
   _LockoutData({
     required this.attemptCount,
     required this.isLockedOut,
