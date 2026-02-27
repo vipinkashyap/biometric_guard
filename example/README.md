@@ -1,16 +1,41 @@
-# biometric_shield__example
+# BiometricShield Example App
 
-A new Flutter project.
+This example demonstrates how to integrate `biometric_shield` in a real Flutter app flow.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+```bash
+cd example
+flutter pub get
+flutter run
+```
 
-A few resources to get you started if this is your first Flutter project:
+## What It Demonstrates
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- Login flow + token storage (`storeToken`)
+- Biometric authentication (`authenticate`, `requireFresh`)
+- Session validation (`validateOrAuthenticate`)
+- Protected screens with `BiometricGate`
+- Reactive auth UI with `BiometricBuilder`
+- Custom fallback handler (`FallbackHandler`) with custom PIN flow
+- Runtime user preferences (`BiometricPreferences`)
+- Multi-user namespacing (`userId`) for session/token/lockout isolation
+- Lockout status and reset behavior
+- Analytics event hooks via `onEvent`
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Screens
+
+- `login_screen.dart`: initial login + biometric unlock
+- `home_screen.dart`: central hub for auth/session actions
+- `sensitive_data_screen.dart`: gate-protected content
+- `biometric_builder_screen.dart`: reactive auth states
+- `custom_fallback_screen.dart`: custom fallback UI integration
+- `settings_screen.dart`: user-configurable biometric preferences
+- `multi_user_screen.dart`: per-user storage/session isolation
+
+## Notes
+
+- This app intentionally uses simple in-app mock behavior for demo clarity.
+- For production backend wiring, see:
+  - `../doc/INTEGRATION.md`
+  - `./example.md`

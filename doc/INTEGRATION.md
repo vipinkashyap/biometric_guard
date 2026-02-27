@@ -380,30 +380,35 @@ class EncryptedBoxTokenStore implements TokenStoreInterface {
   EncryptedBoxTokenStore(this._box);
 
   @override
-  Future<void> store(String token, {required String userId}) async {
-    await _box.put('token_$userId', token);
+  Future<void> store(String key, String value) async {
+    await _box.put(key, value);
   }
 
   @override
-  Future<String?> retrieve({required String userId}) async {
-    return _box.get('token_$userId');
+  Future<String?> retrieve(String key) async {
+    return _box.get(key);
   }
 
   @override
-  Future<void> delete({required String userId}) async {
-    await _box.delete('token_$userId');
+  Future<void> delete(String key) async {
+    await _box.delete(key);
   }
 
   @override
   Future<void> deleteAll() async {
     await _box.clear();
   }
+
+  @override
+  Future<bool> containsKey(String key) async {
+    return _box.containsKey(key);
+  }
 }
 ```
 
 ## Analytics / HIPAA audit trail
 
-Pipe all 29 event types to your analytics service:
+Pipe all emitted event types to your analytics service:
 
 ```dart
 final shield = BiometricShield(
@@ -430,4 +435,4 @@ final shield = BiometricShield(
 );
 ```
 
-Event types include: `authStarted`, `authSuccess`, `authFailed`, `authCancelled`, `fallbackStarted`, `fallbackSuccess`, `sessionCreated`, `sessionExpired`, `lockoutStarted`, `lockoutEnded`, `tokenStored`, `tokenRetrieved`, `tokenRefreshed`, `tokenRefreshFailed`, `policyFetched`, and more.
+Event types include: `authAttempted`, `authSucceeded`, `authFailed`, `authCancelled`, `fallbackTriggered`, `fallbackSucceeded`, `fallbackFailed`, `sessionStarted`, `sessionExpired`, `sessionCleared`, `lockoutStarted`, `lockoutEnded`, `lockoutReset`, `biometricInvalidated`, `tokenStored`, `tokenRetrieved`, `tokenExpired`, `tokenCleared`, `capabilityChecked`, `authTimeout`, `policyFetchFailed`, `enrolled`, and `enrollmentDeclined`.
