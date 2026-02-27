@@ -4,7 +4,7 @@ description: >-
   injectable, namespace-aware layer with typed results, fallback chains,
   session management, lockout logic, and audit event emission. Backend-agnostic —
   works with Firebase, Supabase, Amplify, custom JWT, or any auth system.
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/vipinkashyap/biometric_shield
 repository: https://github.com/vipinkashyap/biometric_shield
 issue_tracker: https://github.com/vipinkashyap/biometric_shield/issues

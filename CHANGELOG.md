@@ -2,6 +2,27 @@
 
 All notable changes to BiometricShield will be documented in this file.
 
+## [0.1.1] — 2026-02-27
+
+### Fixed
+
+- Authentication timeout flow now uses cancellation-aware completion to avoid post-timeout state mutation from in-flight auth work.
+- `clearSession()` now deletes stored token when "Remember Me" is disabled (instead of persisting an empty token).
+- Empty token values are treated as missing/expired during token resolution.
+- `clearAll()` lockout key cleanup now matches persisted key format (`lockout:<userId>`).
+- Server policy enforcement now applies restrictive policy values for:
+  - `maxSessionDuration`
+  - `maxAttempts`
+  - `lockoutDuration`
+  - `forceReauthOnResume`
+
+### Documentation
+
+- Replaced default Flutter template text in `example/README.md` with real example-app usage docs.
+- Corrected `TokenStoreInterface` sample signatures in `doc/INTEGRATION.md` to match current interface.
+- Updated documented analytics event names in `doc/INTEGRATION.md` to match current `BiometricEventType`.
+- Corrected stale event-count wording (the SDK currently emits 23 event types).
+
 ## [0.1.0] — 2026-02-26
 
 ### Added
@@ -16,7 +37,7 @@ All notable changes to BiometricShield will be documented in this file.
 - **User preferences** — `BiometricPreferences` API for runtime settings (enable/disable biometric, remember me, session timeout override, reauth on resume).
 - **Multi-user support** — All storage and sessions namespaced by `userId`. Multiple users on one device never share data.
 - **Platform capability detection** — Rich `BiometricCapability` object with Face ID, Touch ID, strong/weak biometric detection.
-- **Analytics events** — 29 event types emitted via `onEvent` callback for audit trails and analytics.
+- **Analytics events** — 23 event types emitted via `onEvent` callback for audit trails and analytics.
 - **Authentication timeout** — Configurable timeout (default 60s) wrapping the entire auth flow.
 - **Concurrency guard** — Atomic check-and-set prevents duplicate auth prompts.
 - **Flutter UI layer** (optional) — `BiometricBuilder` for full state control, `BiometricGate` for simple gate pattern, `MaterialFallbackHandler` for Material Design fallback UI.
