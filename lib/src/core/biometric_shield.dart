@@ -793,39 +793,67 @@ enum _PlatformAuthResult {
 /// }
 /// ```
 abstract class BiometricShieldInterface {
+  /// The configuration this instance was created with.
   BiometricConfig get config;
+
+  /// User-facing preferences (enable/disable biometric, remember me, etc).
   BiometricPreferences get preferences;
 
+  /// Trigger the full authentication flow including fallbacks.
+  ///
+  /// See [BiometricShield.authenticate] for full documentation.
   Future<BiometricResult> authenticate({
     required String reason,
     String? userId,
     bool requireFresh = false,
   });
 
+  /// Check if a valid (non-expired) session exists without prompting.
   Future<bool> hasValidSession({String? userId});
 
+  /// Validate session silently; only prompt if session has expired.
   Future<BiometricResult> validateOrAuthenticate({
     required String reason,
     String? userId,
   });
 
+  /// Check whether biometric enrollment has been completed on this device.
   Future<bool> isEnrolled();
+
+  /// Guide the user to enroll biometrics (checks enrollment status).
   Future<bool> enroll({String? userId});
 
+  /// End the current session (e.g. on logout).
   Future<void> clearSession({String? userId});
+
+  /// Clear all stored tokens and session state for a user.
   Future<void> clearAll({String? userId});
+
+  /// Get a reactive stream of session state changes.
   Stream<BiometricSession?> sessionStream({String? userId});
+
+  /// Notify the SDK of user activity (extends session if configured).
   void onActivity({String? userId});
 
+  /// Detect what biometric capabilities this device has.
   Future<BiometricCapability> getCapability();
 
+  /// Store a token securely, namespaced to userId.
   Future<void> storeToken(String token, {String? userId});
+
+  /// Retrieve the stored token for a user.
   Future<String?> getToken({String? userId});
 
+  /// Check if the user is currently locked out.
   Future<LockoutState> getLockoutState({String? userId});
+
+  /// Manually reset lockout (e.g. after admin override).
   Future<void> resetLockout({String? userId});
 
+  /// Clean up resources (close streams, timers, etc).
   void dispose();
+
+  /// Dispose resources for a single user without shutting down the SDK.
   Future<void> disposeUser({required String userId});
 }
 

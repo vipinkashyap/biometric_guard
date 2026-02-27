@@ -38,4 +38,4 @@ All notable changes to BiometricShield will be documented in this file.
 - iOS: Minimum deployment target iOS 12.0, requires `NSFaceIDUsageDescription` in Info.plist.
 - Android: Minimum SDK 23, recommended 28+ for BiometricPrompt API.
 - Dart SDK: ^3.10.8
-- Flutter: >=3.10.0
+- Flutter: >=3.29.0

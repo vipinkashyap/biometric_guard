@@ -119,7 +119,10 @@ class BiometricSuccess extends BiometricResult {
     required this.token,
   });
 
+  /// The newly created session.
   final BiometricSession session;
+
+  /// The stored token, if any.
   final String? token;
 }
 
@@ -131,8 +134,13 @@ class BiometricFallbackSuccess extends BiometricResult {
     required this.token,
   });
 
+  /// Which fallback method succeeded.
   final BiometricFallback methodUsed;
+
+  /// The newly created session.
   final BiometricSession session;
+
+  /// The stored token, if any.
   final String? token;
 }
 
@@ -143,7 +151,10 @@ class BiometricSessionValid extends BiometricResult {
     required this.token,
   });
 
+  /// The existing valid session.
   final BiometricSession session;
+
+  /// The stored token, if any.
   final String? token;
 }
 
@@ -163,6 +174,7 @@ class BiometricLockedOut extends BiometricResult {
     required this.lockedUntil,
   });
 
+  /// When the lockout will end (UTC).
   final DateTime lockedUntil;
 }
 
@@ -173,6 +185,7 @@ class BiometricUnavailable extends BiometricResult {
     this.message,
   });
 
+  /// Why biometric is unavailable.
   final BiometricUnavailableReason reason;
 
   /// Optional human-readable message (e.g., server's disabledReason).
@@ -199,6 +212,9 @@ class BiometricError extends BiometricResult {
     required this.cause,
   });
 
+  /// Human-readable error message.
   final String message;
+
+  /// The underlying exception or error, if available.
   final Object? cause;
 }

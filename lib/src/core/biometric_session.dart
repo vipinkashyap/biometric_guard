@@ -1,11 +1,24 @@
 /// The authentication method used to establish a session.
 enum BiometricAuthMethod {
+  /// iOS Face ID.
   faceID,
+
+  /// iOS Touch ID.
   touchID,
+
+  /// Android fingerprint sensor.
   fingerprint,
+
+  /// Android iris / face recognition.
   iris,
+
+  /// Device PIN, pattern, or password (system credential).
   deviceCredential,
+
+  /// Custom app-defined PIN via [FallbackHandler].
   customPin,
+
+  /// Custom app-defined password via [FallbackHandler].
   customPassword,
 }
 

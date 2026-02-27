@@ -2,8 +2,13 @@ import 'fallback_type.dart';
 
 /// Result of a fallback attempt.
 enum FallbackResult {
+  /// Fallback authentication succeeded.
   success,
+
+  /// Fallback authentication failed (wrong PIN, wrong password, etc).
   failed,
+
+  /// User cancelled the fallback prompt.
   cancelled,
 }
 

@@ -67,12 +67,27 @@ class IOSHandler {
 
 /// Raw outcome of an iOS biometric authentication attempt.
 enum IOSAuthOutcome {
+  /// Authentication succeeded (Face ID or Touch ID matched).
   success,
+
+  /// Authentication failed (biometric did not match).
   failed,
+
+  /// User or system cancelled the authentication prompt.
   cancelled,
+
+  /// Biometric hardware is not available on this device.
   notAvailable,
+
+  /// No biometric data is enrolled on this device.
   notEnrolled,
+
+  /// No device passcode is set (required for biometric).
   passcodeNotSet,
+
+  /// Too many failed attempts; device-level lockout active.
   lockedOut,
+
+  /// An unexpected platform error occurred.
   error,
 }

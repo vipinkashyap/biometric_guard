@@ -6,8 +6,8 @@ Thanks for your interest in contributing to BiometricShield.
 
 ```bash
 # Clone the repo
-git clone https://github.com/vipinkashyap/biometric_guard.git
-cd biometric_guard
+git clone https://github.com/vipinkashyap/biometric_shield.git
+cd biometric_shield
 
 # Get dependencies
 flutter pub get

@@ -212,7 +212,12 @@ class AuthenticateCall {
     this.requireFresh = false,
   });
 
+  /// The reason string passed to [authenticate].
   final String reason;
+
+  /// The userId passed to [authenticate], if any.
   final String? userId;
+
+  /// Whether [requireFresh] was set to true.
   final bool requireFresh;
 }
